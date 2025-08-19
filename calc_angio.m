@@ -4,6 +4,8 @@ function angio = calc_angio(MAG,vMean,Venc)
 %   Used by: loadpcvipr.m
 %   Dependencies: NONE
 
+disp(['Calc. Angio for VENC: ' num2str(Venc)]); % TV edit
+
 Vmag = sqrt(sum(vMean.^2,4)); %get speed image
 idx = find(Vmag > Venc); %find where flow velocity > VENC.
 Vmag(idx) = Venc; %cap Vmag at VENC

@@ -15,7 +15,8 @@ SkelBin = SkelBin.*zeroEdger; %make edges 0 (also turns SkelBin to double)
 % specify sortingCriteria as either
 % = 2 to get all branches connected to each other (few branches,no junctions)
 % = 3 to get branch by branch sorting (many branches)
-[cl, branchMat,~,branchTextList,~] = centerlineX(SkelBin, 1, sortingCriteria);
+[cl, branchMat,~,branchTextList,~] = centerlineX(SkelBin, 1, sortingCriteria); % TV note spurlength one is input here? 
+% [cl, branchMat,~,branchTextList,~] = centerlineX(SkelBin, spurLength, sortingCriteria); % TV edit set CL spurlength to spurlength? 
 Cbin4CL = imbinarize(zeroEdger.*segment);
 
 % Prepare clData structure and settings for centerline_new
