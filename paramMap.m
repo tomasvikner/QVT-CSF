@@ -15,7 +15,7 @@ function varargout = paramMap(varargin)
 %   PARAMMAP('Property','Value',...) creates a new PARAMMAP or raises the
 %   existing singleton*.  Starting from the left, property value pairs are
 %   applied to the GUI before paramMap_OpeningFcn gets called.  An
-%   unrecognized property name or invalid value makes property application
+%   unrecognized property name or invalid value makes property applicationLeft ICA Cavernous
 %   stop.  All inputs are passed to paramMap_OpeningFcn via varargin.
 %
 %   *See GUI Options on GUIDE's Tools menu.  Choose "GUI allows only one
@@ -29,7 +29,6 @@ function varargout = paramMap(varargin)
 % University of Wisconsin-Madison 2019
 %   Used by: NONE (START FILE)
 %   Dependencies: loadpcvipr.m
-
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -59,6 +58,16 @@ function paramMap_OpeningFcn(hObject, eventdata, handles, varargin)
 % handles    structure with handles and user data (see GUIDATA)
 % varargin   command line arguments to paramMap (see VARARGIN)
 
+disp('paramMap QVT-CSF'); 
+disp('Reminder to load case: '); 
+
+% add new handles and positions to the GUI object 
+axesHandles = findall(hObject, 'Type', 'axes');
+handles.CSF1 = axesHandles(4);
+handles.CSF2 = axesHandles(1);
+handles.CSF3 = axesHandles(2);
+handles.CSF4 = axesHandles(3);
+
 % Choose default command line output for paramMap
 handles.output = hObject;
 
@@ -68,9 +77,11 @@ movegui(handles.ParameterTool,'northeast'); %move to top left (WORK)
 %set(handles.ParameterTool,'Position',[81 8 190 48]); %HOME
 set(handles.TextUpdate,'String','Load in a 4D Flow Dataset');
 
-
 % --- Executes on button press in LoadData.
 function LoadData_Callback(hObject, eventdata, handles)
+
+% disp(['Handles: ' handles])
+
 % hObject    handle to LoadData (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
@@ -93,6 +104,17 @@ global dcm_obj fig hpatch hscatter Labeltxt cbar hDataTip SavePath
 global MAGcrossection bnumMeanFlow bnumStdvFlow StdvFromMean
 global VplanesAllx VplanesAlly VplanesAllz imageData caseFilePath
 global vesselsAnalyzed allNotes
+global VplanesCSF flowCSF StructCS CSFSEG CC CSFROI % add CSF 
+global FileNameFlow %  
+global venc1 venc2 % 
+global wfState % change between CSF/CUBE WFs etc 
+global WFPS % waveform point save struct
+global T % tangents 
+global MAXLAG 
+MAXLAG = 250; % max CBF to CSF lag (500 when restricted to >0?)
+wfState = 'CnoB'; % set initial CSF WF state 
+venc1 = 1; venc2 = 1; % should be set earlier 
+FileNameFlow = 'C.h5';
 
 % Initial Variables
 hfull = handles;
@@ -109,14 +131,17 @@ d = dir([directory filesep '*.mat']);
 fn = [{'Load New Case'},{d.name}];
 [fileIndx,~] = listdlg('PromptString','Select a file:', ...
     'ListSize',[200 300],'SelectionMode','single','ListString',fn);
+disp(['fileIndx: ' num2str(fileIndx)])
 
 %%% Data Loading
 if  fileIndx > 1  %if a pre-processed case is selected
     
     set(handles.TextUpdate,'String','Loading Preprocessed Data'); drawnow;
     caseFilePath = [directory filesep fn{fileIndx}];
-
-    load(caseFilePath,'data_struct') %load data_struct
+    
+    % separately load larger than usual data struct 
+    data_structFilePath = [caseFilePath(1:end-4), '-ds.mat'];
+    load(data_structFilePath,'data_struct') %load data_struct (save may req edits from QVT to -v7.3 save)
     load(caseFilePath,'Vel_Time_Res') %load data_struct
 
     % This will be the name used for the Excel file
@@ -127,13 +152,15 @@ if  fileIndx > 1  %if a pre-processed case is selected
     % Makes directory if it does already exist (folder is time-stamped)
     warning off
     mkdir(directory,SummaryName);
-    SavePath = [directory filesep SummaryName];
+    % SavePath = [directory filesep SummaryName];
+    SavePath = [directory '/PointsV4/']; % edit 
+    disp(SavePath); % TVR
 
     % Create excel files save summary data
     col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(VENC) 'cm/s'], ...
         'Mean Flow ml/s','Pulsatility Index','Branch Number'});
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
+    % xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
+    % xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
     
     % New Data Structure
     area_val = data_struct.area_val; %area of vessels
@@ -164,37 +191,57 @@ if  fileIndx > 1  %if a pre-processed case is selected
     VplanesAllx = Vel_Time_Res.VplanesAllx; %TR vel planes (uninterped)
     VplanesAlly = Vel_Time_Res.VplanesAlly;
     VplanesAllz = Vel_Time_Res.VplanesAllz;
-    
+
+    % add for CSF 
+    VplanesCSF = []; 
+    StructCS = data_struct.StructCS; 
+    VplanesCSF.x = Vel_Time_Res.VplanesCSF.x; %TR vel planes (uninterped)
+    VplanesCSF.y = Vel_Time_Res.VplanesCSF.y;
+    VplanesCSF.z = Vel_Time_Res.VplanesCSF.z;
+    fns = fieldnames(data_struct.flowCSF);
+    for fi = 1:numel(fns)
+        fn = fns{fi};
+        flowCSF.(fn).median = data_struct.flowCSF.(fn).median;
+        flowCSF.(fn).mean = data_struct.flowCSF.(fn).mean;
+    end
+    CSFSEG = data_struct.CSFSEG;
+    CSFROI = data_struct.CSFROI;
     
     set(handles.TextUpdate,'String','Loading Complete'); drawnow;
     pause(1)
     set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
 
-else %Load in pcvipr data from scratch
-    if exist([directory filesep 'Flow.h5'],'file')
+else % Load in pcvipr data from scratch
+    VplanesCSF = []; 
+    if exist([directory filesep FileNameFlow],'file') % 
+        disp('Loading HDF5')
         [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
         maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
         VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
         timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
-        bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...
-        = loadHDF5(directory,handles);
+        bnumMeanFlow,bnumStdvFlow,StdvFromMean, ...
+        VplanesCSF, flowCSF, StructCS, CSFSEG, T, CSFROI] ...
+        = loadHDF5(directory,handles,FileNameFlow);
         % = loadHDF5_py(directory,handles); 
     elseif exist([directory filesep 'CD.dat'],'file')
         [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_val, ...
         maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
         VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
         timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
-        bnumMeanFlow,bnumStdvFlow,StdvFromMean] ...  
+        bnumMeanFlow,bnumStdvFlow,StdvFromMean, T, CSFROI] ...  
         = loadpcvipr(directory,handles); 
     end 
     
-    directory = uigetdir; %select saving dir 
+    % directory = uigetdir; %select saving dir % load/save in same
     % Save all variables needed to run parametertool. This will be used
     % later to load in data faster instead of having to reload all data.
     % Save data_structure with time/version-stamped filename in 'directory'
     time = datestr(now);
-    saveState = [time(1:2) time(4:6) time(10:11) '_' time(13:14) time(16:17) '_' versionNum];
-    set(handles.TextUpdate,'String',['Saving Data as pcviprData_' saveState '.mat']); drawnow;
+    saveState = [time(1:2) time(4:6) time(10:11) '_' time(13:14) time(16:17)];
+    % saveState = [time(1:2) time(4:6) time(10:11) '_' time(13:14) time(16:17) '_' versionNum];
+    set(handles.TextUpdate,'String',['Saving Data as Flow4D_' saveState '.mat']); drawnow;
+
+    disp('Assigning values to data_struct...'); 
     
     data_struct = [];
     data_struct.directory = directory;
@@ -213,6 +260,7 @@ else %Load in pcvipr data from scratch
     data_struct.PI_val = PI_val;
     data_struct.RI_val = RI_val;
     data_struct.flowPulsatile_val = flowPulsatile_val;
+    
     data_struct.r = r;
     data_struct.timeMIPcrossection = timeMIPcrossection;
     data_struct.MAGcrossection = MAGcrossection;
@@ -222,31 +270,41 @@ else %Load in pcvipr data from scratch
     data_struct.bnumMeanFlow = bnumMeanFlow;
     data_struct.bnumStdvFlow = bnumStdvFlow;
     data_struct.StdvFromMean = StdvFromMean;
-    
     Vel_Time_Res.VplanesAllx = VplanesAllx; %TR vel planes (uninterped)
     Vel_Time_Res.VplanesAlly = VplanesAlly;
     Vel_Time_Res.VplanesAllz = VplanesAllz;
-    
+
+    % add for CSF
+    data_struct.StructCS = StructCS; 
+    Vel_Time_Res.VplanesCSF.x = VplanesCSF.x; %TR vel planes (uninterped)
+    Vel_Time_Res.VplanesCSF.y = VplanesCSF.y;
+    Vel_Time_Res.VplanesCSF.z = VplanesCSF.z;
+    fns = fieldnames(flowCSF);
+    for fi = 1:numel(fns)
+        fn = fns{fi};
+        data_struct.flowCSF.(fn).median = flowCSF.(fn).median;
+        data_struct.flowCSF.(fn).mean = flowCSF.(fn).mean;
+    end
+    data_struct.CSFSEG = CSFSEG; 
+    data_struct.CSFROI = CSFROI; 
     
     % Saves processed data in same location as pcvipr.mat files
-    caseFilePath = fullfile(directory,['pcviprData_' saveState '.mat']);
-    save(caseFilePath,'data_struct','Vel_Time_Res','imageData')
+    caseFilePath = fullfile(directory,['Flow4D_' saveState '.mat']);
+
+    % removing data_struct to its own save due to size limits
+    % save(caseFilePath,'data_struct','Vel_Time_Res','imageData')
+    save(caseFilePath,'Vel_Time_Res','imageData')
+    data_structFilePath = [caseFilePath(1:end-4), '-ds.mat'];
+    save(data_structFilePath, 'data_struct', '-v7.3') % if too large  
     
     % This will be the name used for the Excel file
     finalFolder = regexp(directory,filesep,'split');
-    SummaryName = [finalFolder{end} '_pcviprData_' saveState];
+    SummaryName = [finalFolder{end} '_Flow4D_' saveState];
     warning off
-    mkdir(directory,SummaryName); %makes directory if it already exists
-    
+
     % Where to save data images and excel summary files
-    SavePath = [directory filesep SummaryName];
-        
-    % Create excel files save summary data
-    col_header = ({'Vessel Label', 'Centerline Point', 'Notes',['Max Velocity < ' num2str(VENC) 'cm/s'], ...
-        'Mean Flow ml/s','Pulsatility Index','Branch Label'});
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],col_header,'Summary_Centerline','A1');
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],get(handles.NamePoint,'String'),'Summary_Centerline','A2');
-    set(handles.TextUpdate,'String','Please Select Analysis Plane Location'); drawnow;
+    SavePath = [directory filesep SummaryName];   
+
 end
 
 %%% Plotting 3D Interactive Display
@@ -264,7 +322,8 @@ reducepatch(hpatch,0.7);
 set(hpatch,'FaceColor','white','EdgeColor', 'none','PickableParts','none');
 set(gcf,'color','black');
 axis off tight
-view([1 0 0]);
+% view([1 0 0]);
+view([0 0 1]);
 axis vis3d
 daspect([1 1 1])
 set(gca,'zdir','reverse')
@@ -333,6 +392,12 @@ fullCData = flowPerHeartCycle_val; %initialize fullCData color as flow
 steps = [1./(nframes-1) 10./(nframes-1)]; %set so one 'slide' moves to the next slice exactly
 set(handles.VcrossTRslider,'SliderStep',steps);
 
+% new initializations to track manual coregis and segmentations 
+nplanes = size(branchList, 1);
+CSFSEG.coregTrack = zeros(nplanes, 1);
+CSFSEG.mansegTrack = zeros(nplanes, 1);
+wfState = 'PC-1'; % start at PCA waveform
+disp(['LoadData_Callback complete; WF state: ' wfState])
 
 % --- Outputs from this function are returned to the command line.
 function varargout = paramMap_OutputFcn(hObject, eventdata, handles)
@@ -344,6 +409,9 @@ function parameter_choice_Callback(hObject, eventdata, handles)
 global hscatter area_val RI_val PI_val dcm_obj fig velMean_val
 global flowPerHeartCycle_val fullCData maxVel_val cbar Labeltxt diam_val
 global StdvFromMean
+global CC_val % add coupling 
+
+disp('Called parameter_choice_Callback')
 
 % Get parameter option
 val = get(handles.parameter_choice, 'Value');
@@ -358,14 +426,18 @@ switch str{val}
         set(get(cbar,'xlabel'),'string','Area (cm^2)','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
         fullCData = area_val;
-    case 'Ratio of Areas'
+    case 'Ratio of Areas'  
         Labeltxt = {'Area Ratio: ',  ' ';'Average: ',' '};
-        hscatter.CData = diam_val;
+        disp('Setting Ratio of Areas to CC_val'); 
+        % hscatter.CData = diam_val;
+        hscatter.CData = CC_val; % 
         caxis(fig.CurrentAxes,[min(hscatter.CData) max(hscatter.CData)]);
         cl = caxis(fig.CurrentAxes);
-        set(get(cbar,'xlabel'),'string','Area Ratio','fontsize',16,'Color','white');
+        % set(get(cbar,'xlabel'),'string','Area Ratio','fontsize',16,'Color','white');
+        set(get(cbar,'xlabel'),'string','CSF Coupling','fontsize',16,'Color','white'); 
         set(cbar,'FontSize',16,'color','white');
-        fullCData = diam_val;
+        % fullCData = diam_val; 
+        fullCData = CC_val; 
     case 'Total Flow'
         Labeltxt = {'Flow: ',  ' mL/s';'Average: ',' mL/s'};
         hscatter.CData = flowPerHeartCycle_val;
@@ -406,6 +478,14 @@ switch str{val}
         set(get(cbar,'xlabel'),'string','Resistance Index','fontsize',16,'Color','white');
         set(cbar,'FontSize',16,'color','white');
         fullCData = RI_val;
+    case 'CSF Coupling: '
+        Labeltxt = {'CSF Coupling: ',  ' ';'Average: ',' '};
+        hscatter.CData = CC_val;
+        caxis(fig.CurrentAxes,[-1 1])
+        cl = caxis(fig.CurrentAxes);
+        set(get(cbar,'xlabel'),'string','CSF Coupling','fontsize',16,'Color','white');
+        set(cbar,'FontSize',16,'color','white');
+        fullCData = CC_val;
     case str{val}
         Labeltxt = {'Pulsatility Index: ',  ' ';'Average: ',' '};
         hscatter.CData = PI_val;
@@ -430,8 +510,8 @@ end
 
 
 % --- Executes during object creation, after setting all properties.
-function plot_flowWaveform_CreateFcn(hObject, eventdata, handles)
-
+function plot_flowWaveform_CreateFcn(hObject, eventdata, handles) % note this function is never called and does nothing? 
+disp('Called plot_flowWaveform_CreateFcn; doing nothing?')
 
 % --- Executes on slider movement.
 function Transparent_Callback(hObject, eventdata, handles)
@@ -518,112 +598,178 @@ global PointLabel
 contents = cellstr(get(hObject,'String'));
 PointLabel = contents{get(hObject,'Value')};
 
+function toggleCnoB_Callback(hObject, eventdata, handles)
+global wfState dcm_obj
+if ~strcmp(wfState, 'CnoB')
+    disp('WF switch to CnoB');
+    wfState = 'CnoB';
+end
+set(dcm_obj,'UpdateFcn',@myupdatefcn_all); 
 
-% --- Executes on button press in manualSeg.
-function manualSeg_Callback(hObject, eventdata, handles)
-global dcm_obj branchList timeMIPcrossection segmentFull SavePath caseFilePath
-global area_val flowPerHeartCycle_val maxVel_val r res nframes
-global flowPulsatile_val PI_val RI_val velMean_val 
-global VplanesAllx VplanesAlly VplanesAllz PointLabel
-% global bnumStdvFlow bnumMeanFlow StdvFromMean diam_val 
+function togglePCA_Callback(hObject, eventdata, handles)
+global wfState dcm_obj
+if ~strcmp(wfState, 'PC-1')
+    disp('WF switch to PC-1');
+    wfState = 'PC-1';
+end
+set(dcm_obj,'UpdateFcn',@myupdatefcn_all); 
+ 
+function toggleCUBE_Callback(hObject, eventdata, handles)
+global wfState dcm_obj
+if ~strcmp(wfState, 'CUBE')
+    disp('WF switch to CUBE');
+    wfState = 'CUBE';
+end
+set(dcm_obj,'UpdateFcn',@myupdatefcn_all); 
 
+function updateWaveforms(ROITYPE)
+global VplanesCSF CSFSEG dcm_obj r
 
-info_struct = getCursorInfo(dcm_obj);
-ptList = [info_struct.Position];
-ptList = reshape(ptList,[3,numel(ptList)/3])';
-pindex = zeros(size(ptList,1),1);
+nframes = 20; 
+[INDEX, ~] = get_pindex(dcm_obj);
 
-for n = 1:size(ptList,1)
-    xIdx = find(branchList(:,1) == ptList(n,1));
-    yIdx = find(branchList(xIdx,2) == ptList(n,2));
-    zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
-    pindex(n) = xIdx(yIdx(zIdx));
+% Extract and reshape the ROI mask
+roiCSF = CSFSEG.(ROITYPE)(INDEX, :);
+imdim = sqrt(numel(roiCSF));
+roiCSF = reshape(roiCSF, imdim, imdim);
+
+% Get velocity plane field names, excluding tracking fields
+fns = setdiff(fieldnames(CSFSEG), {'coregTrack', 'segTrack', 'mthrTrack', 'sthrTrack', 'mansegTrack'}, 'stable');
+
+% Loop over time frames
+for n = 1:nframes
+    % Extract and resize velocity planes
+    v = struct();
+    for axis = ["x", "y", "z"]
+        fld = char(axis);
+        slice = squeeze(VplanesCSF.(fld)(INDEX, :, n));             % Extract 1D vector
+        reshaped = reshape(slice, (2 * r) + 1, []);                  % Reshape to 2D
+        resized = imresize(reshaped, [imdim imdim]);                % Resize to image dimension
+        v.(fld) = resized;
+    end
+
+    % Combine into total velocity
+    vtotal = 0.1 * (v.x + v.y + v.z);
+
+    % Apply CSF mask
+    maskedV = roiCSF(:) .* vtotal(:);
+
+    % Compute flow stats for each ROI
+    for i = 1:numel(fns)
+        fn = fns{i};
+        valid = maskedV(maskedV ~= 0);  % Use only non-zero (i.e., masked-in) values
+        flowCSF.(fn).median(INDEX, n) = median(valid, 'omitnan');
+        flowCSF.(fn).mean(INDEX, n)   = mean(valid, 'omitnan');
+    end
 end
 
-% Gives associated branch number if full branch point is wanted
-bnum = branchList(pindex,4);
-Logical_branch = branchList(:,4) ~= bnum;
+function manualCoreg_Callback(~, ~, ~)
+global dcm_obj CSFSEG segmentFull branchList
 
-% OUTPUT +/- points use this
-index_range = pindex-2:pindex+2;
+disp('Called manual 2D point-point Co-Reg')
+pindex = getBranchIndices(dcm_obj, branchList);
+imdim = sqrt(numel(segmentFull(1, :)));
 
-%removes outliers and points from other branches
-index_range(index_range<1) = [];
-index_range(index_range>size(branchList,1)) = [];
-index_range(Logical_branch(index_range)) = [];
+moving = reshape(CSFSEG.cube(pindex, :), imdim, imdim);
+fixed  = reshape(CSFSEG.mcsf(pindex, :), imdim, imdim); % Using mag only
 
-imdim = sqrt(size(segmentFull,2));
-%reshape(Maskcross,imdim,imdim);
-for q = 1:length(index_range)
-    INDEX = index_range(q);
-    cdSlice = timeMIPcrossection(INDEX,:);
-    CDcross = reshape(cdSlice,imdim,imdim)./max(cdSlice);
-    fh = figure; imshow(CDcross,[]);
-    fh.WindowState = 'maximized';
+figure(11); imshow(moving, []); [xm, ym] = ginput(1);
+figure(12); imshow(fixed,  []); [xf, yf] = ginput(1);
 
-    %shape = drawcircle('FaceAlpha',0.15,'LineWidth',1); %create freehand ROI
-    shape = drawpolygon(fh.CurrentAxes);
-    roiMask = createMask(shape);
-    
-    oldMask = reshape(segmentFull(INDEX,:),[81 81]);
-    InterpVals = 4; %choose the interpolation between points
-    dArea = (res/10)^2; %pixel size (cm^2)
-    area = sum(roiMask(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
-    for n=1:nframes
-        v1 = squeeze(VplanesAllx(INDEX,:,n));
-        v2 = squeeze(VplanesAlly(INDEX,:,n));
-        v3 = squeeze(VplanesAllz(INDEX,:,n));
-        v1 = reshape(v1,[(2*r)+1 (2*r)+1]);
-        v2 = reshape(v2,[(2*r)+1 (2*r)+1]);
-        v3 = reshape(v3,[(2*r)+1 (2*r)+1]);
-        v1 = imresize(v1,[imdim imdim]);
-        v2 = imresize(v2,[imdim imdim]);
-        v3 = imresize(v3,[imdim imdim]);
+dx = xf - xm; dy = yf - ym;
+translated = imtranslate(moving, [dx, dy], 'OutputView', 'same');
+figure(13); imshow(translated, []);
 
-        vTimeFrame = roiMask(:).*0.1.*(v1(:) + v2(:) + v3(:)); %masked velocity (cm/s)
-        vTimeFramerowMean = sum(vTimeFrame) ./ sum(vTimeFrame~=0); %mean vel
-        flowPulsatile_val(INDEX,n) = vTimeFramerowMean.*area; %TR flow (ml/s)
-        maxVelFrame(n) = max(vTimeFrame); %max vel. each frame (cm/s)
-        velPulsatile_val(n) = vTimeFramerowMean;%mean vel. each frame (cm/s) 
-    end 
-    maxVel_val(INDEX) = max(maxVelFrame); %max in-plane veloc. for all frames
-    flowPerHeartCycle_val(INDEX) = sum(flowPulsatile_val(INDEX,:),2)./(nframes); %TA flow (ml/s)
-    velMean_val(INDEX) = sum(velPulsatile_val)./(nframes); %TA in-plane velocities
-    segmentFull(INDEX,:) = roiMask(:);
-    area_val(INDEX,1) = area;
+CSFSEG.cube(pindex, :)  = translated(:);
+CSFSEG.bcube(pindex, :) = translated(:) > graythresh(translated(:));
+CSFSEG.coregTrack(pindex) = 1;
 
-    PI_val(INDEX) = abs( max(flowPulsatile_val(INDEX,:)) - min(flowPulsatile_val(INDEX,:)) )./mean(flowPulsatile_val(INDEX,:));
-    RI_val(INDEX) = abs( max(flowPulsatile_val(INDEX,:)) - min(flowPulsatile_val(INDEX,:)) )./max(flowPulsatile_val(INDEX,:));
-    
-    segName = regexprep(PointLabel, ' ', '_');
-    segName = [segName '_' num2str(INDEX)];
-    segFolder = [SavePath filesep 'manual_seg'];
-    if ~exist(segFolder)
-        mkdir(segFolder);
-    end 
-    segPath = fullfile(segFolder,[segName '.mat']);
-    save(segPath,'roiMask')
-    fseg = figure; montage({CDcross, oldMask, CDcross, roiMask})
-    imagePath = fullfile(segFolder,[segName '.png']);
-    saveas(fseg,imagePath);
-    close(fseg);
-    close(fh)
-end 
-SavePoint_Callback(hObject, eventdata, handles);
-parameter_choice_Callback(hObject, eventdata, handles);
-set(dcm_obj,'UpdateFcn',@myupdatefcn_all); %update dataCursor w/ cust. fcn
+set(dcm_obj, 'UpdateFcn', @myupdatefcn_all);
+close([11 12 13]);
+updateWaveforms('dcube');
+
+function pindex = getBranchIndices(dcm_obj, branchList)
+info = getCursorInfo(dcm_obj);
+ptList = reshape([info.Position], 3, []).';
+pindex = zeros(size(ptList, 1), 1);
+
+for n = 1:size(ptList,1)
+    idx = all(bsxfun(@eq, branchList(:,1:3), ptList(n,:)), 2);
+    pindex(n) = find(idx, 1);
+end
+
+function manualCoreg_Callback_3D(~, ~, ~)
+global dcm_obj CSFSEG segmentFull branchList
+
+disp('Called manual 3D point-point Co-Reg')
+pindex = getBranchIndices(dcm_obj, branchList);
+imdim = sqrt(numel(segmentFull(1,:)));
+
+moving = reshape(CSFSEG.cube(pindex,:), imdim, imdim);
+fixed  = reshape(CSFSEG.mcsf(pindex,:), imdim, imdim);
+
+% Get multiple matching points
+figure(11); imshow(moving, []); [xm, ym] = ginput(5);
+figure(12); imshow(fixed,  []); [xf, yf] = ginput(5);
+
+% Estimate and apply rigid 2D transformation
+tform = fitgeotrans([xm ym], [xf yf], 'nonreflectivesimilarity');
+translated = imwarp(moving, tform, 'OutputView', imref2d(size(moving)));
+
+% Display result
+figure(13); imshow(translated, []);
+
+% Update segmentation
+CSFSEG.cube(pindex,:)  = translated(:);
+CSFSEG.bcube(pindex,:) = translated(:) > graythresh(translated(:));
+CSFSEG.coregTrack(pindex) = 1;
+
+set(dcm_obj, 'UpdateFcn', @myupdatefcn_all);
+close([11 12 13]);
+updateWaveforms('dcube');
+
+function manualSeg_Callback(~, ~, ~)
+global dcm_obj CSFSEG segmentFull branchList
+
+disp('Called manual 2D segmentation')
+pindex = getBranchIndices(dcm_obj, branchList);
+imdim = sqrt(numel(segmentFull(1,:)));
+
+% moving = reshape(CSFSEG.cube(pindex,:), imdim, imdim);
+moving = reshape(CSFSEG.scsf(pindex,:), imdim, imdim); % Manual seg on cnob, not cube 
+
+figure(11); imshow(moving, []);
+disp('Draw region with freehand tool. Double-click to finish.');
+caxis([min(moving(:)), 0.5 * max(moving(:))]);
+
+h = imfreehand;
+mask = createMask(h);
+close(11);
+
+% Update segmentation
+% CSFSEG.bcube(pindex,:) = mask(:);
+CSFSEG.cnob(pindex,:) = mask(:); % Manual seg on cnob, not cube
+CSFSEG.segTrack(pindex) = 1;
+
+set(dcm_obj, 'UpdateFcn', @myupdatefcn_all);
+updateWaveforms('cnob');
 
 % --- Executes on button press in SavePoint.
 function SavePoint_Callback(hObject, eventdata, handles)
 global PointLabel nframes VENC timeres branchList timeMIPcrossection area_val
 global flowPerHeartCycle_val PI_val diam_val maxVel_val RI_val flowPulsatile_val
 global vTimeFrameave velMean_val dcm_obj fig segmentFull SavePath MAGcrossection
-global vesselsAnalyzed allNotes
+global vesselsAnalyzed allNotes 
+global venc1 venc2 flowCSF directory % 
+global WFPS VcrossTR CcrossTR Maskcross CC % waveform point save struct
+% global CC_val % CBF-CSF coupling coefficient (not in use) 
+
+% CSFROI values need only be called when using the save callback
+global CSFROI
 
 vesselsAnalyzed{end+1} = PointLabel;
 
 set(handles.TextUpdate,'String','Saving Data.');drawnow;
-SaveRow =  sprintf('B%i',get(handles.NamePoint,'Value')+1); %match excel row to vessel name
 
 info_struct = getCursorInfo(dcm_obj);
 ptList = [info_struct.Position];
@@ -649,140 +795,72 @@ index_range(index_range<1) = [];
 index_range(index_range>size(branchList,1)) = [];
 index_range(Logical_branch(index_range)) = [];
 
-% Time-averaged data
-area = area_val(index_range);
-area = [area;mean(area);std(area)];
-diam = diam_val(index_range);
-diam = [diam;mean(diam);std(diam)];
-flowPerHeartCycle = flowPerHeartCycle_val(index_range);
-flowPerHeartCycle = [flowPerHeartCycle;mean(flowPerHeartCycle);std(flowPerHeartCycle)];
-PI = PI_val(index_range) ;
-PI = [PI;mean(PI);std(PI)];
-maxVel = maxVel_val(index_range);
-maxVel = [maxVel;mean(maxVel);std(maxVel)];
-meanVel = velMean_val(index_range);
-meanVel = [meanVel;mean(meanVel);std(meanVel)];
-RI = RI_val(index_range);
-RI = [RI;mean(RI);std(RI)];
-
+% disp('flowPulsatile (paramMap.m)')
 % Time-resolved flow
 flowPulsatile = flowPulsatile_val(index_range,:);
 flowPulsatile = [flowPulsatile;mean(flowPulsatile,1);std(flowPulsatile,1)];
 
-% Collect branch name and Labels
-savename = PointLabel; %name of current vessel
-warning('off','MATLAB:xlswrite:AddSheet') %shut off excel sheet warning
-Labels = zeros(1,length(index_range));
+% savepoint_callback add CSF flow
+NOXLS = 1; 
+if NOXLS 
 
-% Current and neighboring centerline points along branch
-for n = 1:length(index_range)
-    branchActual = branchList(branchList(:,4) == bnum,5);
-    Labels(n) = find(branchList(index_range(n),5)==branchActual)-1;
-end
-Labels = [Labels,0,0]; %neighboring CL points (including current)
-CLpoint = find(branchList(pindex,5)==branchActual)-1; %current CL point
+    savePoint = [];
 
-% Check if Max Velocity of current 5 planes is less than VENC
-if sum(maxVel>VENC*0.1)==0
-    MaxVel = 'YES';
-else
-    MaxVel = 'NO';
-end
-
-if isempty(allNotes{get(handles.NamePoint,'Value')+1})
-    Notes = get(handles.NoteBox,'String'); %get any notes from notebox
-    SummaryInfo = {CLpoint,Notes,MaxVel,flowPerHeartCycle(end-1),PI(end-1),bnum};
-    xlwrite([SavePath filesep 'SummaryParamTool.xls'],SummaryInfo,'Summary_Centerline',SaveRow);
-end 
-set(handles.TextUpdate,'String','Saving Data..');drawnow;
-
-% save time-averaged
-col_header = ({'Point along Vessel', 'Area (cm^2)', 'Area Ratio', 'Max Velocity (cm/s)',...
-    'Mean Velocity (cm/s)','Average Flow(mL/s)','Pulsatility Index','Resistivity Index'});
-time_avg = vertcat(col_header,num2cell(real(horzcat(Labels',...
-    area,diam,maxVel,meanVel,flowPerHeartCycle,PI,RI))));
-time_avg{end-1,1} = 'Mean';
-time_avg{end,1} = 'Standard Deviation';
-xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_avg,[savename '_T_averaged']);
-set(handles.TextUpdate,'String','Saving Data...');drawnow;
-
-% save time-resolved
-spaces = repmat({''},1,nframes-1);
-col_header2 = ({'Cardiac Time (ms)'});
-col_header3 = horzcat({'Point along Vessel','Flow (mL/s)'},spaces);
-col_header2 = horzcat(col_header2, num2cell(real(timeres/1000*linspace(1,nframes,nframes))));
-time_resolve = vertcat(col_header2, col_header3, num2cell(real(horzcat(Labels',flowPulsatile))));
-time_resolve{end-1,1} = 'Mean';
-time_resolve{end,1} = 'Standard Deviation';
-xlwrite([SavePath filesep 'SummaryParamTool.xls'],time_resolve,[savename '_T_resolved']);
-set(handles.TextUpdate,'String','Saving Data....');drawnow;
-
-% Save: interactive window, main GUI , and cross-section images as montage
-fig.Color = 'black';
-fig.InvertHardcopy = 'off';
-img = getframe(fig);
-imwrite(img.cdata, [ SavePath filesep savename '_3dview.jpg']);
-
-fig2 = handles.ParameterTool;
-fig2.Color = [0.94,0.94,0.94];
-fig2.InvertHardcopy = 'off';
-saveas(fig2,[ SavePath filesep savename '_GUIview.jpg'])
-set(handles.TextUpdate,'String','Saving Data.....');drawnow;
-
-% Get the dimensions of the sides of the slices created
-imdim = sqrt(size(segmentFull,2));
-
-% Get the cross sections for all points for branch
-BranchSlice = segmentFull(index_range,:); %Restricts for branch edges
-cdSlice = timeMIPcrossection(index_range,:);
-velSlice = vTimeFrameave(index_range,:);
-magSlice = MAGcrossection(index_range,:);
-
-subL = size(BranchSlice,1);
-f1 = figure('Position',[100,100,700,700],'Visible','off');
-FinalImage = zeros(imdim,imdim,1,4*subL);
-temp = 1;
-
-%Put all images into a single image for saving cross sectional data
-for q = 1:subL
-    % Create some images of the cross section that is used
-    CDcross = cdSlice(q,:);
-    CDcross = reshape(CDcross,imdim,imdim)./max(CDcross);
-    Vcross = velSlice(q,:);
-    Vcross = reshape(Vcross,imdim,imdim)./max(Vcross);
-    Magcross = magSlice(q,:);
-    Magcross = reshape(Magcross,imdim,imdim)./max(Magcross);
-    Maskcross = BranchSlice(q,:);
-    Maskcross = reshape(Maskcross,imdim,imdim);
+    savePoint.TRCBF = VcrossTR;
+    savePoint.TRCSF = CcrossTR;
+    % savePoint.BMASK = Maskcross;
+    savePoint.CMASK = CC.madj;
     
-    % Put all images into slices
-    FinalImage(:,:,1,temp) = Magcross;
-    FinalImage(:,:,1,temp+1) = CDcross;
-    FinalImage(:,:,1,temp+2) = Vcross;
-    FinalImage(:,:,1,temp+3) = Maskcross;
-    temp = temp+4;
+    savePoint.bnum = bnum;
+    savePoint.Logical_branch = Logical_branch;
+    savePoint.index_range = index_range; 
+    savePoint.ptList = ptList; 
+
+    savePoint.CBF = flowPulsatile * venc2; 
+    savePoint.CSF.bics = flowCSF.bics.mean(index_range, :) * venc1; 
+    savePoint.CSF.bcsf = flowCSF.bcsf.mean(index_range, :) * venc1; 
+    savePoint.CSF.cnob = flowCSF.cnob.mean(index_range, :) * venc1; 
+    savePoint.CSF.full = flowCSF.full.mean(index_range, :) * venc1; 
+    savePoint.CSF.pc1 = flowCSF.PC1.mean(index_range, :) * venc1; 
+    DOMADJ = false; 
+    if DOMADJ
+        if sum(flowCSF.madj.mean(index_range, :)) > 0 %#ok<UNRCH> 
+            savePoint.CSF.madj = flowCSF.madj.mean(index_range, :) * venc1; 
+        end
+        savePoint.CSF.madj = flowCSF.madj.mean(index_range, :) * venc1; 
+    end
+
+    savePoint.CSFROI.bics = CSFROI.bics(index_range, :, :, :); 
+    savePoint.CSFROI.bcsf = CSFROI.bcsf(index_range, :, :, :); 
+    savePoint.CSFROI.cnob = CSFROI.cnob(index_range, :, :, :); 
+    savePoint.CSFROI.flow = CSFROI.flow(index_range, :, :, :); 
+
+    % Name of point label e.g. Left MCA as in scroll menu in GUI 
+    savePoint.pointName = PointLabel; 
+
+    % note - Waveform point save (struct) - THIS contains most important information to export!
+    savePoint.WFPS = WFPS;  
+
+    % save([SavePath savePoint.pointName '.mat'], 'savePoint');
+    SavePath = [directory filesep 'PointsV4/']; 
+    if ~exist(SavePath, 'dir')
+        mkdir(SavePath)
+    end
+    save([SavePath savePoint.pointName '.mat'], 'savePoint');
+    disp(['Saved point @: ' [SavePath savePoint.pointName '.mat'] ]);
+
+else % temp remove old save to xls file 
+    disp('Save to XLS temp cleaned out in CSF V4'); 
 end
-subplot('position', [0 0 1 1])
-montage(FinalImage, 'Size', [subL 4]);
-saveas(f1,[ SavePath filesep savename '_Slicesview.jpg'])
-close(f1)
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-set(handles.NoteBox,'String',' ');
-set(handles.TextUpdate,'String','Please select new point for analysis');drawnow;
-NamePoint_Callback(hObject, eventdata, handles)
-
 
 % --- NoteBox_Callback
 function NoteBox_Callback(hObject, eventdata, handles)
-
 
 % --- Executes during object creation, after setting all properties.
 function NoteBox_CreateFcn(hObject, eventdata, handles)
 if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor','white');
 end
-
 
 % --- Executes on button press in SubmitNote.
 function SubmitNote_Callback(hObject, eventdata, handles)
@@ -818,6 +896,7 @@ view(fig.CurrentAxes,[90,0])
 function AreaThreshSlide_Callback(hObject, eventdata, handles)
 global LogPoints area_val branchList hscatter AveAreaBranch PI_val RI_val
 global velMean_val diam_val maxVel_val flowPerHeartCycle_val StdvFromMean
+global CC_val %  
 
 LogPoints = find(AveAreaBranch>max(AveAreaBranch)*get(hObject,'Value')*.15);
 LogPoints = ismember(branchList(:,4),LogPoints);
@@ -833,7 +912,8 @@ if get(handles.InvertArea,'Value') == 0
         case 'Area'
             hscatter.CData = area_val(LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_val(LogPoints);
+            hscatter.CData = CC_val(LogPoints);
+            hscatter.CData = CC_val(LogPoints); 
         case 'Total Flow'
             hscatter.CData = flowPerHeartCycle_val(LogPoints);
         case 'Maximum Velocity '
@@ -844,6 +924,8 @@ if get(handles.InvertArea,'Value') == 0
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
             hscatter.CData = RI_val(LogPoints);
+        case 'CSF Coupling'
+            hscatter.CData = CC_val(LogPoints);
         case str{val}
             hscatter.CData = PI_val(LogPoints);
     end
@@ -858,7 +940,8 @@ else
         case 'Area'
             hscatter.CData = area_val(~LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_val(~LogPoints);
+            % hscatter.CData = diam_val(~LogPoints);
+            hscatter.CData = CC_val(~LogPoints); 
         case 'Total Flow'
             hscatter.CData = flowPerHeartCycle_val(~LogPoints);
         case 'Maximum Velocity '
@@ -869,6 +952,8 @@ else
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
             hscatter.CData = RI_val(~LogPoints);
+        case 'CSF Coupling'
+            hscatter.CData = CC_val(~LogPoints);
         case str{val}
             hscatter.CData = PI_val(~LogPoints);
     end
@@ -881,6 +966,26 @@ if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColo
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
 
+% --- help function for updating waveforms from sliders/mansegs
+function [pindex, index_range] = get_pindex(dcm_obj)
+global branchList dcm_obj 
+info_struct = getCursorInfo(dcm_obj);
+ptList = [info_struct.Position];
+ptList = reshape(ptList,[3,numel(ptList)/3])';
+pindex = zeros(size(ptList,1),1);
+for n = 1:size(ptList,1)
+    xIdx = find(branchList(:,1) == ptList(n,1));
+    yIdx = find(branchList(xIdx,2) == ptList(n,2));
+    zIdx = find(branchList(xIdx(yIdx),3) == ptList(n,3));
+    pindex(n) = xIdx(yIdx(zIdx));
+end
+bnum = branchList(pindex,4);
+Logical_branch = branchList(:,4) ~= bnum;
+index_range = pindex; 
+index_range(index_range<1) = [];
+index_range(index_range>size(branchList,1)) = [];
+index_range(Logical_branch(index_range)) = [];
+
 
 % --- Executes on slider movement.
 function clWidthSlider_Callback(hObject, eventdata, handles)
@@ -890,6 +995,7 @@ set(hscatter,'SizeData',get(hObject,'Value'));
 
 % --- Executes during object creation, after setting all properties.
 function clWidthSlider_CreateFcn(hObject, eventdata, handles)
+% disp('Called clWidthSlider_CreateFcn')
 if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
@@ -912,6 +1018,7 @@ function InvertArea_Callback(hObject, eventdata, handles)
 % Hint: get(hObject,'Value') returns toggle state of InvertArea
 global LogPoints area_val branchList hscatter PI_val RI_val velMean_val
 global diam_val maxVel_val flowPerHeartCycle_val StdvFromMean
+global CC_val % 
 
 % Capable of inverting areaThresh (keep vessels OUTSIDE/INSIDE areaThresh)
 OnOff = get(hObject,'Value'); %on off switch
@@ -926,7 +1033,8 @@ if OnOff == 0 %if turned off (default),
         case 'Area'
             hscatter.CData = area_val(LogPoints);
         case 'Ratio of Areas'
-            hscatter.CData = diam_val(LogPoints);
+            % hscatter.CData = diam_val(LogPoints); 
+            hscatter.CData = CC_val(LogPoints); % 
         case 'Total Flow'
             hscatter.CData = flowPerHeartCycle_val(LogPoints);
         case 'Maximum Velocity '
@@ -937,6 +1045,8 @@ if OnOff == 0 %if turned off (default),
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
             hscatter.CData = RI_val(LogPoints);
+        case 'CSF Coupling'
+            hscatter.CData = CC_val(LogPoints);
         case str{val}
             hscatter.CData = PI_val(LogPoints);
     end
@@ -962,16 +1072,16 @@ else %if invert is turned on, PLOT DATA POINTS OUTSIDE AREA THRESHOLD
             hscatter.CData = StdvFromMean(LogPoints);
         case 'Resistance Index'
             hscatter.CData = RI_val(~LogPoints);
+        case 'CSF Coupling'
+            hscatter.CData = CC_val(~LogPoints);
         case str{val}
             hscatter.CData = PI_val(~LogPoints);
     end
 end
 
-
 % --- Executes on slider movement.
 function VcrossTRslider_Callback(hObject, eventdata, handles)
 updateVcrossTR(handles)
-
 
 % --- Executes during object creation, after setting all properties.
 function VcrossTRslider_CreateFcn(hObject, eventdata, handles)
@@ -979,11 +1089,10 @@ if isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColo
     set(hObject,'BackgroundColor',[.9 .9 .9]);
 end
 
-
-
 function updateVcrossTR(handles)
 global dcm_obj hfull segmentFull VplanesAllx VplanesAlly VplanesAllz 
-global nframes branchList
+global VplanesCSF StructCS CSFSEG CC % add some TR CSF planes 
+global nframes branchList wfState
 
 info_struct = getCursorInfo(dcm_obj);
 if ~isempty(info_struct)
@@ -1002,35 +1111,76 @@ if ~isempty(info_struct)
     Maskcross = segmentFull(pindex,:);
     Maskcross = reshape(Maskcross,imdim,imdim);
 
-    %get slice number from slider
+    % get slice number from slider
     sliceNum = 1+round( get(hfull.VcrossTRslider,'Value').*(nframes-1) ); 
 
+    % Orig CS data 
     v1 = squeeze(VplanesAllx(pindex,:,:));
     v2 = squeeze(VplanesAlly(pindex,:,:));
     v3 = squeeze(VplanesAllz(pindex,:,:));
-    VcrossTR = 0.1*(v1 + v2 + v3);
+    VcrossTR = 0.1*(v1 + v2 + v3); 
+
+    % CSF CS data
+    c1 = squeeze(VplanesCSF.x(pindex,:,:));
+    c2 = squeeze(VplanesCSF.y(pindex,:,:));
+    c3 = squeeze(VplanesCSF.z(pindex,:,:));
+    CcrossTR = 0.1*(c1 + c2 + c3); 
+
+    cbfscale = 1.0; 
+    csfscale = 1.0; 
+    % VcrossTRmean = mean(VcrossTR, 2); % Time-average
+    % VcrossTR = VcrossTR - VcrossTRmean; % remove mean flow to visualize CBF pulsation
     normDim = sqrt(size(VcrossTR,1));
     VcrossTR = reshape(VcrossTR,normDim,normDim,nframes);
     VcrossTR = imresize(VcrossTR,[imdim imdim],'nearest');
-    minn = min(Maskcross.*VcrossTR,[],'all')*1.1;
-    maxx = max(Maskcross.*VcrossTR,[],'all')*1.1;
+    minn = min(Maskcross.*VcrossTR,[],'all')*cbfscale;
+    maxx = max(Maskcross.*VcrossTR,[],'all')*cbfscale;
     imshow(VcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.TRcross)
+    title(hfull.TRcross, 'CBF velocity (time-res. )', 'FontSize', 13);
     visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
+
+    % CSF CS data
+    normDim = sqrt(size(CcrossTR,1));
+    CcrossTR = reshape(CcrossTR,normDim,normDim,nframes);
+    CcrossTR = imresize(CcrossTR,[imdim imdim],'nearest');
+    minn = min(CcrossTR(:)); maxx = max(CcrossTR(:));
+    minn = minn * csfscale; maxx = maxx * csfscale;
+    imshow(CcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.CSF4)
+    title(hfull.CSF4, 'CSF velocity (time-res. )', 'FontSize', 13);
+    INCROI = double(StructCS.full(pindex, :)); INCROI = reshape(INCROI,imdim,imdim);
+    if strcmp(wfState, 'CUBE')
+        visboundaries(hfull.CSF4,CC.bcube,'LineWidth',1) % auto/manual combo to vis/seg
+    else
+        visboundaries(hfull.CSF4,CC.madj,'LineWidth',1) % auto/manual combo to vis/seg
+    end
 end 
-    
 
+function txt = myupdatefcn_all(empt,event_obj) %
 
-function txt = myupdatefcn_all(empt,event_obj)
+% closing manual ROI windows when changing pindex 
+% disp('myupdatefcn_all')
+try 
+    close(2:3)
+catch
+end
+
 % Customizes text of data tips
 global Labeltxt branchLabeled PointLabel branchList fullCData
-global flowPulsatile_val Planes p dcm_obj Ntxt hfull timeMIPcrossection
+global flowPulsatile_val Planes p dcm_obj Ntxt hfull timeMIPcrossection flowCSF
 global segmentFull MAGcrossection vTimeFrameave fig timeres nframes
 global VplanesAllx VplanesAlly VplanesAllz
+global VplanesCSF StructCS CSFSEG CC % 
+global wfState % toggle CSF WF state 
+global venc1 venc2 % note these are 1/1 anyway (edit if scaling in QVT)
+global WFPS % waveform point save struct
+global MAXLAG
 
 info_struct = getCursorInfo(dcm_obj);
 ptList = [info_struct.Position];
 ptList = reshape(ptList,[3,numel(ptList)/3])';
 pindex = zeros(size(ptList,1),1);
+
+% resetMagSlider(hObject)
 
 % Find cursor point in branchList
 for n = 1:size(ptList,1)
@@ -1052,43 +1202,83 @@ index_range(Logical_branch(index_range)) = [];
 set(p,'XData',Planes(pindex,:,1)','YData',Planes(pindex,:,2)','ZData',Planes(pindex,:,3)')
 imdim = sqrt(size(segmentFull,2)); %side length of cross-section
 
-Maskcross = segmentFull(pindex,:);
-Maskcross = reshape(Maskcross,imdim,imdim);
+% difining new local CS for vis 
+CC = [];
+fns = fieldnames(CSFSEG);
+for i = 1:numel(fns) 
+    fn = fns{i};
+    if ~contains(fn, 'Track') % Don't update segmentation and coreg track
+        CC.(fn) = reshape(double(CSFSEG.(fn)(pindex,:)),imdim,imdim);
+    end
+end
+if sum(CC.madj(:)==0) 
+    CC.madj = CC.auto;
+end
 
-%Magnitude TA
+% CBF ROI 
+Maskcross = segmentFull(pindex,:);
+Maskcross = reshape(Maskcross,imdim,imdim); 
+
+% Magnitude TA
 MAGcross = MAGcrossection(pindex,:);
 MAGcross = reshape(MAGcross,imdim,imdim);
-imshow(MAGcross,[],'InitialMagnification','fit','Parent',hfull.MAGcross)
-visboundaries(hfull.MAGcross,Maskcross,'LineWidth',1)
+imshow(MAGcross,[],'InitialMagnification','fit','Parent',hfull.MAGcross) % CBF #1 - show CBF mag as normal
+title(hfull.MAGcross, 'CBF magnitude', 'FontSize', 13);
+% visboundaries(hfull.MAGcross,Maskcross,'LineWidth',1)
 
-%Complex diffference TA
+% Complex diffference TA
 CDcross = timeMIPcrossection(pindex,:);
 CDcross = reshape(CDcross,imdim,imdim);
-imshow(CDcross,[],'InitialMagnification','fit','Parent', hfull.CDcross)
-visboundaries(hfull.CDcross,Maskcross,'LineWidth',1)
+imshow(CC.rage,[],'InitialMagnification','fit','Parent', hfull.CDcross) % CBF #2 - show MPRAGE in CD location 
+title(hfull.CDcross, 'T1-w MP-RAGE', 'FontSize', 13);
+% visboundaries(hfull.CDcross,Maskcross,'LineWidth',1)
 
-%Velocity TA - through plane
-Vcross = vTimeFrameave(pindex,:);
-Vcross = reshape(Vcross,imdim,imdim);
-imshow(Vcross,[],'InitialMagnification','fit','Parent',hfull.VELcross)
+% Velocity TA - through plane
+imshow(CDcross,[],'InitialMagnification','fit','Parent', hfull.VELcross) % CBF #3 - show CD in VELcross location 
+title(hfull.VELcross, 'Complex Difference', 'FontSize', 13);
 visboundaries(hfull.VELcross,Maskcross,'LineWidth',1)
 
-%Velocity TR - through plane
+% Velocity TR - through plane
 sliceNum = 1+round( get(hfull.VcrossTRslider,'Value').*(nframes-1) ); 
 v1 = squeeze(VplanesAllx(pindex,:,:));
 v2 = squeeze(VplanesAlly(pindex,:,:));
 v3 = squeeze(VplanesAllz(pindex,:,:));
-VcrossTR = 0.1*(v1 + v2 + v3);
+VcrossTR = 0.1*(v1 + v2 + v3); % ORIG 
 normDim = sqrt(size(VcrossTR,1));
 VcrossTR = reshape(VcrossTR,normDim,normDim,nframes);
 VcrossTR = imresize(VcrossTR,[imdim imdim],'nearest');
 minn = min(Maskcross.*VcrossTR,[],'all')*1.1;
 maxx = max(Maskcross.*VcrossTR,[],'all')*1.1;
 imshow(VcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.TRcross)
-visboundaries(hfull.TRcross,Maskcross,'LineWidth',1)
+title(hfull.TRcross, 'CBF velocity (time-res. )', 'FontSize', 13);
+visboundaries(hfull.TRcross,Maskcross,'LineWidth',1) % CBF #4 - show time-resolved CBF 
 
-% Segmentation mask
-%imshow(Maskcross,[],'InitialMagnification','fit','Parent',hfull.TRcross)
+% CSF vis
+imshow(CC.mcsf,[],'InitialMagnification','fit','Parent',hfull.CSF1) % CSF #1 - show CSF mag and blood in CSF (BICS) 
+title(hfull.CSF1, 'CSF magnitude', 'FontSize', 13)
+visboundaries(hfull.CSF1,CC.bics,'LineWidth',1)
+imshow(CC.cube,[],'InitialMagnification','fit','Parent',hfull.CSF2) % CSF #2 - show CUBE and BCSF 
+title(hfull.CSF2, 'CUBE Anti-FLAIR', 'FontSize', 13)
+% title(hfull.CSF2, 'CUBE Anti-FLAIR', 'FontSize', 13) TODO: what should be
+% the final name on the T2 CUBE 
+visboundaries(hfull.CSF2,CC.bcube,'LineWidth',1) % is > 0 may be sufficient if interp of non-binary, or fix interp to nn 
+imshow(CC.scsf,[],'InitialMagnification','fit','Parent',hfull.CSF3) % CSF #3 - show CSF SD and CNOB 
+title(hfull.CSF3, 'CSF velocity STD', 'FontSize', 13)
+visboundaries(hfull.CSF3,CC.bcsf,'LineWidth',1)
+
+% CSF Velocity TR - through-plane 
+sliceNum = 1+round( get(hfull.VcrossTRslider,'Value').*(nframes-1) ); 
+c1 = squeeze(VplanesCSF.x(pindex,:,:));
+c2 = squeeze(VplanesCSF.y(pindex,:,:));
+c3 = squeeze(VplanesCSF.z(pindex,:,:));
+CcrossTR = 0.1*(c1 + c2 + c3); % ORIG tdim = 3; 
+normDim = sqrt(size(CcrossTR,1));
+CcrossTR = reshape(CcrossTR,normDim,normDim,nframes);
+CcrossTR = imresize(CcrossTR,[imdim imdim],'nearest');
+minn = min(CcrossTR(:)); maxx = max(CcrossTR(:));
+imshow(CcrossTR(:,:,sliceNum),[minn maxx],'InitialMagnification','fit','Parent',hfull.CSF4)
+title(hfull.CSF4, 'CSF velocity (time-res. )', 'FontSize', 13)
+visboundaries(hfull.CSF4,CC.madj,'LineWidth',1) % CSF #4
 
 % Get value of parameter at point and mean within 5pt window
 value = fullCData(pindex);
@@ -1096,29 +1286,129 @@ average = fullCData(index_range);
 pside = index_range;
 pside(pside==pindex) = [];
 
-cardiacCycle = (1:nframes).*timeres; %vector of cardiac cycle (ms)
-% Plot flow waveform
-if length(pside)==2
-    plot(cardiacCycle,smooth(flowPulsatile_val(pindex,:)),...
-        'k',cardiacCycle,smooth(flowPulsatile_val(pside(1),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_val(pside(2),:)),...
-        'r','LineWidth',2,'Parent',hfull.pfwaveform)
-elseif length(pside)==3
-    plot(cardiacCycle,smooth(flowPulsatile_val(pindex,:)),...
-        'k',cardiacCycle,smooth(flowPulsatile_val(pside(1),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_val(pside(2),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_val(pside(3),:)),...
-        'b','LineWidth',2,'Parent',hfull.pfwaveform)
-else
-    plot(cardiacCycle,smooth(flowPulsatile_val(pindex,:)),...
-        'k',cardiacCycle,smooth(flowPulsatile_val(pside(1),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_val(pside(2),:)),...
-        'r',cardiacCycle,smooth(flowPulsatile_val(pside(3),:)),...
-        'b',cardiacCycle,smooth(flowPulsatile_val(pside(4),:)),...
-        'b','LineWidth',2,'Parent',hfull.pfwaveform)
+% define waveforms 
+if size(pside, 2) > size(pside, 1)
+    pside = pside';
 end
-set(get(hfull.pfwaveform,'XLabel'),'String','Cardiac Time Frame (ms)','FontSize',12)
-set(get(hfull.pfwaveform,'YLabel'),'String','Flow (mL/s)','FontSize',12)
+pinds = [pindex; pside];
+csfinds = pinds; 
+cbfinds = pinds;   
+
+c = linspecer(2); 
+c1 = c(1, :); 
+c2 = c(2, :);
+PLW = 2.4; 
+
+cbfwf = flowPulsatile_val(cbfinds, :);
+if strcmp(wfState, 'PC-1')
+    csfwf = flowCSF.PC1.mean(csfinds, :); 
+elseif strcmp(wfState, 'CnoB')
+    csfwf = flowCSF.cnob.mean(csfinds, :); 
+elseif strcmp(wfState, 'CUBE')
+    csfwf = flowCSF.bcube.mean(csfinds, :); 
+end
+
+zeroRows = all(csfwf == 0, 2); % Do not average over those that have no CSF ROI
+nanRows = all(isnan(csfwf), 2);
+emptyRows = find(zeroRows | nanRows);
+csfwf(emptyRows, :) = []; 
+cbfwf(emptyRows, :) = []; 
+
+ncsf = size(csfwf, 1);
+if ncsf == 0
+    CSF = zeros(1, 20);
+elseif ncsf == 1
+    CSF = csfwf;
+else
+    % CSF = mean(csfwf);
+    CSF = median(csfwf);
+end
+% CBF = mean(cbfwf);
+CBF = median(cbfwf);
+
+nframes = 20; % Original frames
+iframes = 1000; % Desired output resolution
+xo = linspace(1, nframes, nframes);
+xq = linspace(1, nframes, iframes);
+CBF = interp1(xo, CBF', xq, 'pchip'); % mean point 
+CSF = interp1(xo, CSF', xq, 'pchip');
+csfwf = interp1(xo, csfwf', xq, 'pchip'); % all points 
+cbfwf = interp1(xo, cbfwf', xq, 'pchip');
+
+[rmax, mlag] = waveformCoupling(CBF, CSF, MAXLAG); % max 300 ms delay?
+
+amp = [];
+amp.CSF = max(CSF) - min(CSF);
+amp.CBF = max(CBF) - min(CBF);
+cdv = [];
+ccsf = cumtrapz(CSF - mean(CSF)) * 1e-3; % with current interp? 
+ccbf = cumtrapz(CBF - mean(CBF)) * 1e-3;
+cdv.CSF = max(ccsf) - min(ccsf);
+cdv.CBF = max(ccbf) - min(ccbf);
+
+WFPS = [];
+WFPS.amp = amp;
+WFPS.cdv = cdv;
+WFPS.rmax = rmax;
+WFPS.mlag = mlag;
+WFPS.CBF.all = cbfwf;
+WFPS.CBF.avg = CBF';
+WFPS.CSF.all = csfwf;
+WFPS.CSF.avg = CSF';
+WFPS.irange = index_range;
+WFPS.pindex = pindex; 
+
+cardiacCycle = 1:numel(CBF);
+
+if isempty(CSF)
+    disp('CSF waveform empty!')
+    disp(size(flowCSF.mean))
+    disp(size(flowPulsatile_CBF))
+end
+
+% Clear both yyaxes first
+yyaxis(hfull.pfwaveform, 'left');
+cla(hfull.pfwaveform);
+yyaxis(hfull.pfwaveform, 'right');
+cla(hfull.pfwaveform);
+
+% Now start plotting cleanly
+yyaxis(hfull.pfwaveform, 'left');
+plot(hfull.pfwaveform, cardiacCycle, WFPS.CSF.avg, 'LineWidth', PLW*2, 'Color', c1);
+hold(hfull.pfwaveform, 'on');
+for k = 1:size(WFPS.CSF.all, 2)
+    plot(hfull.pfwaveform, cardiacCycle, WFPS.CSF.all(:, k), ...
+        'LineWidth', PLW/2, 'Color', c1, ...
+        'LineStyle', '--', ...
+        'Marker', 'none');
+end
+ylabel(hfull.pfwaveform, 'Flow (CSF) (mL/s)', 'FontSize', 16);
+hfull.pfwaveform.YColor = c1;
+
+yyaxis(hfull.pfwaveform, 'right');
+plot(hfull.pfwaveform, cardiacCycle, WFPS.CBF.avg, 'LineWidth', PLW*2, 'Color', c2);
+hold(hfull.pfwaveform, 'on');
+for k = 1:size(WFPS.CBF.all, 2)
+    plot(hfull.pfwaveform, cardiacCycle, WFPS.CBF.all(:, k), ...
+        'LineWidth', PLW/2, 'Color', c2, ...
+        'LineStyle', '-', ...
+        'Marker', 'none');
+end
+ylabel(hfull.pfwaveform, 'Flow (CBF) (mL/s)', 'FontSize', 16);
+hfull.pfwaveform.YColor = c2;
+
+% legend(hfull.pfwaveform, '', ...
+%     ['CSF amp.: ' num2str(amp.CSF, 3) ' mL/s'], '', ...
+%     ['CBF amp.: ' num2str(amp.CBF, 3) ' mL/s'], ...
+%     'Box', 'off', 'FontSize', 16, 'FontWeight', 'bold', ...
+%     'Location', 'North');
+
+title(hfull.pfwaveform, ttext, 'FontSize', 16);
+grid(hfull.pfwaveform, 'on');
+hfull.pfwaveform.XAxisLocation = 'bottom';
+
+yyaxis(hfull.pfwaveform, 'left');
+axis(hfull.pfwaveform, 'tight');
 
 % Put the number labels on the CenterlinePlot if new branch
 if branchLabeled ~= bnum
@@ -1144,7 +1434,6 @@ txt = {['Point Label: ' , PointLabel , sprintf('\n'), ...
     Labeltxt{2,1},sprintf('%0.3f',mean(average)),Labeltxt{2,2},sprintf('\n'), ...
     'Current Branch #: ',sprintf('%i',CurrentNum),sprintf('\n') ...
     'Label Number: ', sprintf('%i',bnum)]};
-
 
 % --- Executes when user attempts to close ParameterTool.
 function ParameterTool_CloseRequestFcn(hObject, eventdata, handles)

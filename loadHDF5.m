@@ -2,70 +2,56 @@ function [nframes,matrix,res,timeres,VENC,area_val,diam_val,flowPerHeartCycle_va
     maxVel_val,PI_val,RI_val,flowPulsatile_val,velMean_val, ...
     VplanesAllx,VplanesAlly,VplanesAllz,Planes,branchList,segment,r, ...
     timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, imageData, ...
-    bnumMeanFlow,bnumStdvFlow,StdvFromMean] = loadHDF5(directory,handles)
-%LOADHDF5: loadhdf5 reads in PCVIPR data saved in h5
+    bnumMeanFlow,bnumStdvFlow,StdvFromMean, ... 
+    VplanesCSF, flowCSF, StructCS, CSFSEG, T, CSFROI] = loadHDF5(directory,handles,FileNameFlow)
+
+% LOADHDF5: loadhdf5 reads in PCVIPR data saved in h5
 %   Used by: paramMap.m
 %   Dependencies: background_phase_correction.m, evaluate_poly.m, calc_angio.m,
 %   feature_extraction.m, paramMap_params_new.m, slidingThreshold.m
 
-%% Read HDF5
+%% Read HDF5 (update for CBF/CSF combined .h5-files) 
 filetype = 'hdf5';
-set(handles.TextUpdate,'String','Loading .HDF5 Data'); drawnow;
-%cd = h5read(fullfile(directory,'Flow.h5'),'/ANGIO');
-mag = h5read(fullfile(directory,'Flow.h5'),'/Data/MAG');
-vx = h5read(fullfile(directory,'Flow.h5'),'/Data/comp_vd_1');
-vy = h5read(fullfile(directory,'Flow.h5'),'/Data/comp_vd_2');
-vz = h5read(fullfile(directory,'Flow.h5'),'/Data/comp_vd_3');
+set(handles.TextUpdate,'String','Loading .HDF5 Data'); 
+drawnow;
+
+% Just the blood flow data 
+mag = h5read(fullfile(directory,FileNameFlow),'/mcbf');
+vx = h5read(fullfile(directory,FileNameFlow),'/xcbf')/1000;
+vy = h5read(fullfile(directory,FileNameFlow),'/ycbf')/1000;
+vz = h5read(fullfile(directory,FileNameFlow),'/zcbf')/1000; 
 
 disp('Computing time-averaged data')
-%CD = mean(cd,4)*32000;
+% CD = mean(cd,4)*32000;
 MAG = single(mag);
-V(:,:,:,1) = single(vx);
-V(:,:,:,2) = single(vy);
-V(:,:,:,3) = single(vz);
+V(:,:,:,1) = single(mean(vx, 4)); % time-average here 
+V(:,:,:,2) = single(mean(vy, 4));
+V(:,:,:,3) = single(mean(vz, 4));
+
+% add all anatomical information to a volume struct 
+StructVols = []; 
+StructVols.mcbf = mag; 
+StructVols.mcsf = h5read(fullfile(directory, FileNameFlow),'/mcsf');
+StructVols.scsf = h5read(fullfile(directory, FileNameFlow),'/scsf');
+StructVols.scbf = h5read(fullfile(directory, FileNameFlow),'/scbf');
+
+StructVols.cube = h5read(fullfile(directory, FileNameFlow),'/cube'); 
+StructVols.rage = h5read(fullfile(directory, FileNameFlow),'/rage');
+
+StructVols.pvas = h5read(fullfile(directory, FileNameFlow),'/pvasc');
+StructVols.gcsf = h5read(fullfile(directory, FileNameFlow),'/gcsf');
 
 clear mag vx vy vz
 
-
-%% Reads PCVIPR Header from H5 (only to get gating data)
-headerh5 = h5info(fullfile(directory,'Flow.h5'),'/Header');
-for i = 1:size(headerh5.Attributes,1)
-    new_field = headerh5.Attributes(i).Name;
-    if(strcmp(new_field,'2d_flag')) 
-     %skip    
-    else
-        attr_val = headerh5.Attributes(i).Value;    
-        if (isnumeric(attr_val))
-            attr_val = double(attr_val);
-        end
-        pcviprHeader.(new_field) = attr_val; 
-    end   
-end
-
-%%%% SPATIAL RESOLUTION ASSUMED TO BE ISOTROPIC (PCVIPR)
-%timeres = pcviprHeader.timeres; %temporal resolution (ms)
-%res = nonzeros(abs([pcviprHeader.ix,pcviprHeader.iy,pcviprHeader.iz])); %spatial res (mm)
-%VENC = pcviprHeader.VENC;
-%matrix(1) = pcviprHeader.matrixx; %number of pixels in rows (ASSUMED ISOTROPIC)
-%matrix(2) = pcviprHeader.matrixy;
-%matrix(3) = pcviprHeader.matrixz;
-%nframes = pcviprHeader.frames;
-% Checks if automatic background phase correction was performed in recon
-BGPCdone = pcviprHeader.automatic_BGPC_flag;
-BGPCdone = 0; %assume automatic backg. phase corr. wasnt done in recon
-
-imageData.gating_rr = pcviprHeader.median_rr_interval_ms;
-imageData.gating_hr = pcviprHeader.expected_hr_bpm;
-imageData.gating_var = round(pcviprHeader.vals_within_expected_rr_pct);
-
-% for some reason now the h5 header has the wrong matrix size, something
-% change in PSD
+% BGPCdone = 0; % assume automatic backg. phase corr. wasnt done in recon
+BGPCdone = 1; % if 1, assume assume BG corr was done in recon 
  
 %% Reads PCVIPR Header
 set(handles.TextUpdate,'String','Loading .DAT Data'); drawnow;
-fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
+% fid = fopen([directory filesep 'pcvipr_header.txt'], 'r');
+fid = fopen('/Users/TXV016/Documents/MATLAB/MatlabProc/pcvipr_header.txt', 'r'); % currently load same header for all 
 delimiter = ' ';
-formatSpec = '%s%s%[^\n\r]'; %read 2 strings(%s%s),end line(^\n),new row(r)
+formatSpec = '%s%s%[^\n\r]'; % read 2 strings(%s%s),end line(^\n),new row(r)
 % Info from headers are placed in dataArray, 1x2 cell array.
 dataArray = textscan(fid, formatSpec, 'Delimiter', delimiter, ...
     'MultipleDelimsAsOne', true, 'ReturnOnError', false);
@@ -115,8 +101,15 @@ BIN = SUMnumA>0.25; % Find where projection crosses thresh value of 0.25
 [~,IDXend(3)] = max(flipud(BIN),[],1); 
 IDXend(3) = matrix(3) - IDXend(3) + 1; %get last thresh crossing
 
-% Crop data with new dimensions
+% Crop data with new dimensions 
 MAG = MAG(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
+
+% Crop all 3D volumes - not just CBF magnitude 
+fns = fields(StructVols);
+for j = 1:numel(fns) 
+    fn = fns{j};
+    StructVols.(fn) = StructVols.(fn)(IDXstart(1):IDXend(1),IDXstart(2):IDXend(2),IDXstart(3):IDXend(3));
+end
 newDIM = size(MAG);
     
 %% Read Average Velocity
@@ -160,9 +153,10 @@ SMf = 10; %smoothing factor
 shiftHM_flag = 1; %flag to shift max curvature by FWHM
 medFilt_flag = 1; %flag for median filtering of CD image
 [~,segment] = slidingThreshold(timeMIP,step,UPthresh,SMf,shiftHM_flag,medFilt_flag);
-areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
+% areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
+areaThresh = round(sum(segment(:)).*0.01); % edit increase minimum area 
 conn = 6; %connectivity (i.e. 6-pt)
-segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
+segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes % note segmentation based on area 
 
 clear CDcrop x y SMf temp n halfMaxRightIndex halfMaxLeftIndex Idx BIN V
 clear curvatureSM denom num ddy dy ddx dx areaThresh fullWidth conn
@@ -176,32 +170,24 @@ imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
 
-
-
 %% Feature Extraction
 % Get trim and create the centerline data
 sortingCriteria = 3; %sorts branches by junctions/intersects 
-spurLength = 15; %minimum branch length (removes short spurs)
+% spurLength = 15; % 
+spurLength = 30; % minimum branch length (removes short spurs) - 15 to 25 to focus on a few main branches? 
 [~,~,branchList,~] = feature_extraction(sortingCriteria,spurLength,vMean,segment,handles);
 
-% Flow parameter calculation, bulk of code is in paramMap_parameters.m
-SEG_TYPE = 'kmeans'; %kmeans or thresh
-if strcmp(SEG_TYPE,'kmeans')
-    [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val, ...
-        velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
-        vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-        = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back, ...
-        BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
-elseif strcmp(SEG_TYPE,'thresh')
-    [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val, ...
-        flowPulsatile_val,velMean_val,VplanesAllx,VplanesAlly,VplanesAllz, ...
-        r,timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, ...
-        bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-        = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean,...
-        back,BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
-else
-    disp("Incorrect segmentation type selected, please select 'kmeans' or 'thresh'");
-end 
+disp('paramMap_params_CSF')
+[area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val, ...
+    flowPulsatile_val,velMean_val,VplanesAllx,VplanesAlly,VplanesAllz, ...
+    r,timeMIPcrossection,segmentFull,vTimeFrameave,MAGcrossection, ...
+    bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes, ...
+    VplanesCSF, flowCSF, StructCS, CSFSEG, T, CSFROI] ... % new structs for CSF analysis
+    = paramMap_params_CSF(filetype,branchList,matrix,timeMIP,vMean,...
+    back,BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles, ...
+    StructVols, FileNameFlow); %#ok<*ASGLU>
+
+disp('paramMap_params_CSF done')
 
 set(handles.TextUpdate,'String','All Data Loaded'); drawnow;
 
