@@ -6,7 +6,7 @@
 
 ## About This Fork
 
-This repository is a **customized version** of QVT by **Tomas Vikner**, adapted specifically for the **joint analysis of blood and CSF 4D-flow MRI** to study coupling dynamics between blood and CSF.
+This repository is a **customized version** of QVT by **Tomas Vikner**, adapted specifically for the **joint analysis of blood and CSF 4D-flow MRI** to study coupling dynamics between blood and CSF, still under development.
 
 ---
 
