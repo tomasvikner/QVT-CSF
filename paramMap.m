@@ -1224,14 +1224,14 @@ MAGcross = MAGcrossection(pindex,:);
 MAGcross = reshape(MAGcross,imdim,imdim);
 imshow(MAGcross,[],'InitialMagnification','fit','Parent',hfull.MAGcross) % CBF #1 - show CBF mag as normal
 title(hfull.MAGcross, 'CBF magnitude', 'FontSize', 13);
-% visboundaries(hfull.MAGcross,Maskcross,'LineWidth',1)
+visboundaries(hfull.MAGcross,Maskcross,'LineWidth',1)
 
 % Complex diffference TA
 CDcross = timeMIPcrossection(pindex,:);
 CDcross = reshape(CDcross,imdim,imdim);
 imshow(CC.rage,[],'InitialMagnification','fit','Parent', hfull.CDcross) % CBF #2 - show MPRAGE in CD location 
 title(hfull.CDcross, 'T1-w MP-RAGE', 'FontSize', 13);
-% visboundaries(hfull.CDcross,Maskcross,'LineWidth',1)
+visboundaries(hfull.CDcross,Maskcross,'LineWidth',1)
 
 % Velocity TA - through plane
 imshow(CDcross,[],'InitialMagnification','fit','Parent', hfull.VELcross) % CBF #3 - show CD in VELcross location 
@@ -1261,6 +1261,8 @@ imshow(CC.cube,[],'InitialMagnification','fit','Parent',hfull.CSF2) % CSF #2 - s
 title(hfull.CSF2, 'CUBE Anti-FLAIR', 'FontSize', 13)
 % title(hfull.CSF2, 'CUBE Anti-FLAIR', 'FontSize', 13) TODO: what should be
 % the final name on the T2 CUBE 
+
+% TEMP: turning off vis boundaries
 visboundaries(hfull.CSF2,CC.bcube,'LineWidth',1) % is > 0 may be sufficient if interp of non-binary, or fix interp to nn 
 imshow(CC.scsf,[],'InitialMagnification','fit','Parent',hfull.CSF3) % CSF #3 - show CSF SD and CNOB 
 title(hfull.CSF3, 'CSF velocity STD', 'FontSize', 13)
@@ -1336,6 +1338,8 @@ csfwf = interp1(xo, csfwf', xq, 'pchip'); % all points
 cbfwf = interp1(xo, cbfwf', xq, 'pchip');
 
 [rmax, mlag] = waveformCoupling(CBF, CSF, MAXLAG); % max 300 ms delay?
+ttext = ['Coupling (xcorr [-1, 1] / lag (ms): ' num2str(rmax, 3), ' / ' num2str(mlag, 3)];
+ttl = title(hfull.pfwaveform, ttext);
 
 amp = [];
 amp.CSF = max(CSF) - min(CSF);
@@ -1373,35 +1377,71 @@ yyaxis(hfull.pfwaveform, 'right');
 cla(hfull.pfwaveform);
 
 % Now start plotting cleanly
-yyaxis(hfull.pfwaveform, 'left');
-plot(hfull.pfwaveform, cardiacCycle, WFPS.CSF.avg, 'LineWidth', PLW*2, 'Color', c1);
-hold(hfull.pfwaveform, 'on');
-for k = 1:size(WFPS.CSF.all, 2)
-    plot(hfull.pfwaveform, cardiacCycle, WFPS.CSF.all(:, k), ...
-        'LineWidth', PLW/2, 'Color', c1, ...
-        'LineStyle', '--', ...
-        'Marker', 'none');
-end
-ylabel(hfull.pfwaveform, 'Flow (CSF) (mL/s)', 'FontSize', 16);
-hfull.pfwaveform.YColor = c1;
+PATCHON = true;
+FIVELINES = false;
+if FIVELINES
+    yyaxis(hfull.pfwaveform, 'left'); %#ok<*UNRCH>
+    plot(hfull.pfwaveform, cardiacCycle, WFPS.CSF.avg, 'LineWidth', PLW*2, 'Color', c1);
+    % TEMP: turning of CSF.all 
+    hold(hfull.pfwaveform, 'on');
+    for k = 1:size(WFPS.CSF.all, 2)
+        plot(hfull.pfwaveform, cardiacCycle, WFPS.CSF.all(:, k), ...
+            'LineWidth', PLW/2, 'Color', c1, ...
+            'LineStyle', '--', ...
+            'Marker', 'none');
+    end
+    ylabel(hfull.pfwaveform, 'Flow (CSF) (mL/s)', 'FontSize', 16);
+    hfull.pfwaveform.YColor = c1;
+    
+    yyaxis(hfull.pfwaveform, 'right');
+    plot(hfull.pfwaveform, cardiacCycle, WFPS.CBF.avg, 'LineWidth', PLW*2, 'Color', c2);
+    % TEMP: turning of CBF.all 
+    hold(hfull.pfwaveform, 'on');
+    for k = 1:size(WFPS.CBF.all, 2)
+        plot(hfull.pfwaveform, cardiacCycle, WFPS.CBF.all(:, k), ...
+            'LineWidth', PLW/2, 'Color', c2, ...
+            'LineStyle', '-', ...
+            'Marker', 'none');
+    end
+    ylabel(hfull.pfwaveform, 'Flow (CBF) (mL/s)', 'FontSize', 16);
+    hfull.pfwaveform.YColor = c2;
+    
+    legend(hfull.pfwaveform, '', ...
+        ['CSF amp.: ' num2str(amp.CSF, 3) ' mL/s'], '', ...
+        ['CBF amp.: ' num2str(amp.CBF, 3) ' mL/s'], ...
+        'Box', 'off', 'FontSize', 16, 'FontWeight', 'bold', ...
+        'Location', 'North');
+elseif PATCHON
 
-yyaxis(hfull.pfwaveform, 'right');
-plot(hfull.pfwaveform, cardiacCycle, WFPS.CBF.avg, 'LineWidth', PLW*2, 'Color', c2);
-hold(hfull.pfwaveform, 'on');
-for k = 1:size(WFPS.CBF.all, 2)
-    plot(hfull.pfwaveform, cardiacCycle, WFPS.CBF.all(:, k), ...
-        'LineWidth', PLW/2, 'Color', c2, ...
-        'LineStyle', '-', ...
-        'Marker', 'none');
-end
-ylabel(hfull.pfwaveform, 'Flow (CBF) (mL/s)', 'FontSize', 16);
-hfull.pfwaveform.YColor = c2;
+    yyaxis(hfull.pfwaveform, 'left');
+    sdcsf = std(WFPS.CSF.all, [], 2)';
+    upper_bound = CSF + sdcsf;
+    lower_bound = CSF - sdcsf;
+    X = [cardiacCycle(:)', fliplr(cardiacCycle(:)')];
+    Y = [upper_bound(:)', fliplr(lower_bound(:)')];
+    patch(hfull.pfwaveform, X, Y, c1, 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    hold(hfull.pfwaveform, 'on');
+    plot(hfull.pfwaveform, cardiacCycle, CSF, 'LineWidth', PLW, 'Color', c1);
+    hold(hfull.pfwaveform, 'off');
 
-% legend(hfull.pfwaveform, '', ...
-%     ['CSF amp.: ' num2str(amp.CSF, 3) ' mL/s'], '', ...
-%     ['CBF amp.: ' num2str(amp.CBF, 3) ' mL/s'], ...
-%     'Box', 'off', 'FontSize', 16, 'FontWeight', 'bold', ...
-%     'Location', 'North');
+    yyaxis(hfull.pfwaveform, 'right');
+    sdcbf = std(WFPS.CBF.all, [], 2)';
+    upper_bound = CBF + sdcbf;
+    lower_bound = CBF - sdcbf;
+    X = [cardiacCycle(:)', fliplr(cardiacCycle(:)')];
+    Y = [upper_bound(:)', fliplr(lower_bound(:)')];
+    patch(hfull.pfwaveform, X, Y, c2, 'FaceAlpha', 0.3, 'EdgeColor', 'none');
+    hold(hfull.pfwaveform, 'on');
+    plot(hfull.pfwaveform, cardiacCycle, CBF, 'LineWidth', PLW, 'Color', c2);
+    hold(hfull.pfwaveform, 'off');
+
+    legend(hfull.pfwaveform, '', ...
+    ['CSF amp.: ' num2str(amp.CSF, 3) ' mL/s'], '', ...
+    ['CBF amp.: ' num2str(amp.CBF, 3) ' mL/s'], ...
+    'Box', 'off', 'FontSize', 16, 'FontWeight', 'bold', ...
+    'Location', 'North');
+
+end
 
 title(hfull.pfwaveform, ttext, 'FontSize', 16);
 grid(hfull.pfwaveform, 'on');
