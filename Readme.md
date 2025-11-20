@@ -1,6 +1,6 @@
 # Quantitative Velocity Tool (QVT) – Modified Version for Cerebrospinal Fluid (CSF)
 
-*Based on the original* **Quantitative Velocity Tool (QVT)** developed and maintained by **Grant S. Roberts, Carson A. Hoffman, and Leonardo A. Rivera-Rivera**, originally hosted at **uwmri/QVT** (https://github.com/uwmri/QVT/)
+*Based on the original* **Quantitative Velocity Tool (QVT)** originally hosted at **uwmri/QVT** (https://github.com/uwmri/QVT/)
 
 ---
 
@@ -12,4 +12,4 @@ This repository is a **customized version** of QVT by **Tomas Vikner** which is 
 
 ## Contact
 
-For questions or feedback on this modified version, feel free to reach out to **vikner@wisc.edu**.
+For questions on this modified version, feel free to reach out to **vikner@wisc.edu**.
