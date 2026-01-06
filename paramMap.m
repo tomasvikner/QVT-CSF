@@ -232,13 +232,8 @@ else % Load in pcvipr data from scratch
         = loadpcvipr(directory,handles); 
     end 
     
-    % directory = uigetdir; %select saving dir % load/save in same
-    % Save all variables needed to run parametertool. This will be used
-    % later to load in data faster instead of having to reload all data.
-    % Save data_structure with time/version-stamped filename in 'directory'
-    time = datestr(now);
-    saveState = [time(1:2) time(4:6) time(10:11) '_' time(13:14) time(16:17)];
-    % saveState = [time(1:2) time(4:6) time(10:11) '_' time(13:14) time(16:17) '_' versionNum];
+    time = datestr(now); %#ok<*DATST>
+    saveState = [time(1:2) time(4:6) time(10:11) '_' time(13:14) time(16:17)]; % '_' versionNum];
     set(handles.TextUpdate,'String',['Saving Data as Flow4D_' saveState '.mat']); drawnow;
 
     disp('Assigning values to data_struct...'); 

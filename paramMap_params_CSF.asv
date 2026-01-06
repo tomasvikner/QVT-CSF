@@ -116,7 +116,7 @@ for n = 1:size(Tangent_V,1)
     dArea = (MD.res/10).^2; %pixel size (cm^2)
     area_val(n,1) = sum(segment(:))*dArea*((2*r+1)/(2*r*InterpVals+1))^2;
     CBFSEG(n,:) = segment(:); % final blood segment l
-    diam_val(n,1) = calc_diam(segment); % TEMP note: is this really diam? 
+    diam_val = calc_diam(segment);
     % *** END OF LOCAL CBF SEGMENTATION ***
 
     % *** LOCAL CSF SEGMENTATION (QVT-CSF only) ***
@@ -156,7 +156,7 @@ for n = 1:size(Tangent_V,1)
 
 end 
 disp('In-plane seg. done (paramMap_params_CSF)') 
-disp(['Total CBF and CSF CS-count: ' num2str(size(Tangent_V, 1))]);
+disp(['Total CBF & CSF CS-count: ' num2str(size(Tangent_V, 1))]);
 if ecsfc > 0, disp(['Empty CSF (but not CBF) count: ' num2str(ecsfc)]); end
 
 % make sure all csfsegFull segmentations have mcsf > 0

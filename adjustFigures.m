@@ -1,4 +1,5 @@
-%% Edit figures before opening GUI  
+%% TEMP edit of Figures before QVT-CSF
+% Needs some cleanup 
 addpath QVT; 
 close all; 
 
