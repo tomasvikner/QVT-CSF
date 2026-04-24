@@ -10,6 +10,12 @@ This repository is a **customized version** of QVT by **Tomas Vikner** which is 
 
 ---
 
+## Master/clean branch 
+
+So far used master branch for a small study (N=10) and working on a clean branch that will be easier to use and modify 
+
+---
+
 ## Contact
 
 For questions on this modified version, feel free to reach out to **vikner@wisc.edu**.
