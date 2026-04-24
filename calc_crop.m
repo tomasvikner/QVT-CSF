@@ -1,6 +1,7 @@
 function IDX = calc_crop(MAG)
 
 % Auto crop images to save memory 
+matrix = size(MAG);
 SUMnumA = squeeze(sum(sum(MAG,1),2)); %1D axial projection
 SUMnumS = squeeze(sum(sum(MAG,1),3))'; %1D sagittal projection
 SUMnumC = squeeze(sum(sum(MAG,2),3)); %1D coronal projection

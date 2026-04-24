@@ -1,4 +1,4 @@
-function [x_full, y_full, z_full, Planes] = calc_planes(PLANESIZE, InterpVals, branchList, V2)
+function [x_full, y_full, z_full, Planes] = calc_planes(PLANESIZE, InterpVals, branchList, V2, V3)
 
 Side = PLANESIZE*InterpVals; %creates correct number of points for interpolation
 width = Side.*2+1; %width of plane in pixels

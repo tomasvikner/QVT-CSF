@@ -4,6 +4,14 @@ function [Vplanes, v1, v2, v3, c1, c2, c3] = calc_vplanes( ...
     x, y, z, x_full, y_full, z_full, ...
     Tangent_V, branchList, ...
     width, r, InterpVals, nframes)
+xg = 1:x; yg = 1:y; zg = 1:z;
+if ndims(vxf) >= 4
+    nframesData = min([size(vxf,4), size(vyf,4), size(vzf,4), ...
+        size(cxf,4), size(cyf,4), size(czf,4)]);
+else
+    nframesData = 1;
+end
+nframes = max(1, min(nframes, nframesData));
 
 % ==========================================================
 % INTERP COLUMN INDICES
@@ -36,9 +44,9 @@ c1 = v1; c2 = v1; c3 = v1;
 for j = 1:nframes
 
     % -------- CBF --------
-    v1j = interp3(y,x,z,vxf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
-    v2j = interp3(y,x,z,vyf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
-    v3j = interp3(y,x,z,vzf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
+    v1j = interp3(yg,xg,zg,vxf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
+    v2j = interp3(yg,xg,zg,vyf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
+    v3j = interp3(yg,xg,zg,vzf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
 
     v1j = reshape(v1j,nvox,npix) .* Tangent_V(:,1);
     v2j = reshape(v2j,nvox,npix) .* Tangent_V(:,2);
@@ -51,9 +59,9 @@ for j = 1:nframes
     Vplanes.CBF.z(:,:,j) = v3j(:,idCOL);
 
     % -------- CSF --------
-    c1j = interp3(y,x,z,cxf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
-    c2j = interp3(y,x,z,cyf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
-    c3j = interp3(y,x,z,czf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
+    c1j = interp3(yg,xg,zg,cxf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
+    c2j = interp3(yg,xg,zg,cyf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
+    c3j = interp3(yg,xg,zg,czf(:,:,:,j),y_full(:),x_full(:),z_full(:),'linear',0);
 
     c1j = reshape(c1j,nvox,npix) .* Tangent_V(:,1);
     c2j = reshape(c2j,nvox,npix) .* Tangent_V(:,2);

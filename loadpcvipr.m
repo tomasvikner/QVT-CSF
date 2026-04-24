@@ -111,8 +111,8 @@ end
 %% Create Angio
 % Calculate complex difference angiogram for visualization.
 set(handles.TextUpdate,'String','Creating Angiogram'); drawnow;
-timeMIP = calc_angio(MAG, vMean, VENC);
-% NOTE: timeMIP is an approximated complex difference image.
+cdImg = calc_cd_timeavg(MAG, vMean, VENC);
+% cdImg: complex-difference magnitude from time-averaged MAG and vMean (calc_cd_timeavg).
 % The result is nearly equivalent to loading 'CD.dat'.
 
 %% Find optimum global threshold 
@@ -121,7 +121,7 @@ UPthresh = 0.8; %max upper threshold when creating Sval curvature plot
 SMf = 10;
 shiftHM_flag = 1; %flag to shift max curvature by FWHM
 medFilt_flag = 1; %flag for median filtering of CD image
-[~,segment] = slidingThreshold(timeMIP,step,UPthresh,SMf,shiftHM_flag,medFilt_flag);
+[~,segment] = slidingThreshold(cdImg,step,UPthresh,SMf,shiftHM_flag,medFilt_flag);
 areaThresh = round(sum(segment(:)).*0.005); %minimum area to keep
 conn = 6; %connectivity (i.e. 6-pt)
 segment = bwareaopen(segment,areaThresh,conn); %inverse fill holes
@@ -133,7 +133,7 @@ clear SUMnumA SUMnumC SUMnumS SUMnum step ans dataHeader UPthresh shiftHM_flag
 
 % save raw (cropped) images to imageData structure (for Visual Tool)
 imageData.MAG = MAG;
-imageData.CD = timeMIP; 
+imageData.CD = cdImg;
 imageData.V = vMean;
 imageData.Segmented = segment;
 imageData.pcviprHeader = pcviprHeader;
@@ -151,13 +151,13 @@ if strcmp(SEG_TYPE,'kmeans')
     [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
         velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
         vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-        = paramMap_params_kmeans(filetype,branchList,matrix,timeMIP,vMean,back,...
+        = paramMap_params_kmeans(filetype,branchList,matrix,cdImg,vMean,back,...
         BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
 elseif strcmp(SEG_TYPE,'thresh')
     [area_val,diam_val,flowPerHeartCycle_val,maxVel_val,PI_val,RI_val,flowPulsatile_val,...
         velMean_val,VplanesAllx,VplanesAlly,VplanesAllz,r,timeMIPcrossection,segmentFull,...
         vTimeFrameave,MAGcrossection,bnumMeanFlow,bnumStdvFlow,StdvFromMean,Planes] ...
-        = paramMap_params_new(filetype,branchList,matrix,timeMIP,vMean,back,...
+        = paramMap_params_new(filetype,branchList,matrix,cdImg,vMean,back,...
         BGPCdone,directory,nframes,res,MAG,IDXstart,IDXend,handles);
 else
     disp("Incorrect segmentation type selected, please select 'kmeans' or 'thresh'");

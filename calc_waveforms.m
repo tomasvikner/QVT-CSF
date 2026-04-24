@@ -16,8 +16,12 @@ csfwf(emptyRows, :) = [];
 cbfwf(emptyRows, :) = []; 
 
 ncsf = size(csfwf, 1);
+nT = size(cbfwf, 2);
+if nT < 1
+    nT = 1;
+end
 if ncsf == 0
-    CSF = zeros(1, 20);
+    CSF = zeros(1, nT);
 elseif ncsf == 1
     CSF = csfwf;
 else
@@ -27,8 +31,7 @@ CBF = median(cbfwf);
 
 if isempty(CSF)
     disp('CSF waveform empty!')
-    disp(size(flowCSF.mean))
-    disp(size(flowPulsatile_CBF))
+    disp(size(cbfwf))
 end
 
 if isempty(CBF)

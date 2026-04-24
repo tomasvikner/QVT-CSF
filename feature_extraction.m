@@ -67,24 +67,38 @@ for nbr = 1:length(branch)
 end
 branchList = branchListSorted;
 
+if isempty(branchList)
+    sz = size(segment);
+    c = [1, 1, 1];
+    if numel(sz) >= 3
+        c = max(1, round((sz(1:3) + 1) / 2));
+    end
+    branchList = [c(1), c(2), c(3), 1, 1];
+    warning('feature_extraction:EmptyCenterline', ...
+        'No centerline from segmentation; using a stub point at the volume center so loading can continue.');
+end
+
 %% Centerline smoothing
 % Smooths labeled centerline w/ splenic spline fit
-branchListSmooth = ones([size(branchList,1),size(branchList,2)]);   
+branchListSmooth = double(branchList);
 smoothParameter = 0.3750; %user-defined degree of smoothing
-for n = 1:max(branchList(:,4))
-    branchActual = branchList(branchList(:,4)==n,:); %branch locations(xyz)
-    xyz = [branchActual(:,1)';branchActual(:,2)';branchActual(:,3)'];
-    [ndim,npts] = size(xyz);
+for n = 1:max(branchList(:, 4))
+    branchActual = branchList(branchList(:, 4) == n, :); %branch locations(xyz)
+    xyz = [branchActual(:, 1)'; branchActual(:, 2)'; branchActual(:, 3)'];
+    [ndim, npts] = size(xyz);
     xyzp = zeros(size(xyz)); %initialize spline xyz matrix
-    
-    % Cubic spline smoothing (see function details)
-    % Default smoothParameter is = 1/(1 + spacing^3/6) = 0.8571
-    for k=1:ndim %for each dimension (xyz)
-        pp = csaps(1:npts,xyz(k,:),smoothParameter);
-        xyzp(k,:)=ppval(pp,1:npts); %apply spline fit params to new matrix
+
+    if npts < 2
+        xyzp = xyz;
+    else
+        % Cubic spline smoothing (see function details)
+        for k = 1:ndim %for each dimension (xyz)
+            pp = csaps(1:npts, xyz(k, :), smoothParameter);
+            xyzp(k, :) = ppval(pp, 1:npts); %apply spline fit params to new matrix
+        end
     end
-    branchListSmooth(branchList(:,4)==n,1:3) = xyzp'; %reassign xyz locs
-    branchListSmooth(branchList(:,4)==n,4:5) = branchList(branchList(:,4)==n,4:5);
+    branchListSmooth(branchList(:, 4) == n, 1:3) = xyzp'; %reassign xyz locs
+    branchListSmooth(branchList(:, 4) == n, 4:5) = branchList(branchList(:, 4) == n, 4:5);
 end
 branchList = branchListSmooth;
 

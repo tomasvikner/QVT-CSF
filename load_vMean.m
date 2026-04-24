@@ -1,10 +1,10 @@
-function vMean = load_vMean(newDIM, MD)
+function vMean = load_vMean(newDIM, MD, IDX)
 
 % Just the blood flow data (TEMP: note scaling 1000)
 disp('Computing time-averaged data')
-vx = h5read(fullfile(MD.directory, MD.infile),'/xcbf')/1000;
-vy = h5read(fullfile(MD.directory, MD.infile),'/ycbf')/1000;
-vz = h5read(fullfile(MD.directory, MD.infile),'/zcbf')/1000;
+vx = h5read(fullfile(MD.directory, MD.infile),'/bphx')/1000;
+vy = h5read(fullfile(MD.directory, MD.infile),'/bphy')/1000;
+vz = h5read(fullfile(MD.directory, MD.infile),'/bphz')/1000;
 V(:,:,:,1) = single(mean(vx, 4)); % time-average here
 V(:,:,:,2) = single(mean(vy, 4));
 V(:,:,:,3) = single(mean(vz, 4));

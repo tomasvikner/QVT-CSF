@@ -64,14 +64,23 @@ brindx = brindx(~cellfun('isempty',brindx)); %chop entries from array
 Nbranch = length(brindx);
 
 %% Endpoint, Midpoint, and Branch Parameterization
+if Nbranch < 1
+    branch = struct('x', {}, 'y', {}, 'z', {}, 'dS', {}, 'S', {});
+    return;
+end
+
+emptyB = struct('x', [], 'y', [], 'z', [], 'dS', [], 'S', []);
+branch = repmat(emptyB, Nbranch, 1);
+
 nskip = 0;
-endpt = zeros(3,2,Nbranch); %initialize endpoints/midpoints of each branch
-for jbranch = 1:Nbranch 
+endpt = zeros(3, 2, Nbranch); %initialize endpoints/midpoints of each branch
+for jbranch = 1:Nbranch
     clear pos
     ns = length(brindx{jbranch}); %number of points in branch
     if ns <= 1  %neglect trivial branches
         nskip = nskip + 1;
         iskip(nskip) = jbranch;
+        branch(jbranch) = emptyB;
         continue
     end
     [iy,ix,iz] = ind2sub(volDim,brindx{jbranch}); %index to image subscript
@@ -179,6 +188,11 @@ for jbranch = 1:Nbranch
     pos.S = cumsum([0 pos.dS]); %running distance from 1st endpoint
     branch(jbranch) = pos; %struct w/ location, distance info of branches
 end
+
+% Drop branches that were skipped or never parameterized (empty x)
+keep = arrayfun(@(b) ~isempty(b.x), branch);
+branch = branch(keep);
+
 %% Cluster Analysis
 % Uncomment the following code for cluster analysis, adjacency matrix,
 % direcitonal adjacency matrix, and calculation of branchMap.
