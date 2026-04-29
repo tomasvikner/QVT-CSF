@@ -16,6 +16,7 @@ csfwf(emptyRows, :) = [];
 cbfwf(emptyRows, :) = []; 
 
 ncsf = size(csfwf, 1);
+ncbf = size(cbfwf, 1);
 nT = size(cbfwf, 2);
 if nT < 1
     nT = 1;
@@ -27,7 +28,16 @@ elseif ncsf == 1
 else
     CSF = median(csfwf);
 end
-CBF = median(cbfwf);
+
+% Keep full time-series when only one CBF point is available.
+% Using median(rowVector) collapses to a scalar in MATLAB and flattens waveform.
+if ncbf == 0
+    CBF = zeros(1, nT);
+elseif ncbf == 1
+    CBF = cbfwf;
+else
+    CBF = median(cbfwf, 1, 'omitnan');
+end
 
 if isempty(CSF)
     disp('CSF waveform empty!')

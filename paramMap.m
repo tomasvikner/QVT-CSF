@@ -673,7 +673,7 @@ axis(hfull.pfwaveform, 'tight');
 bnum = branchList(pindex,4);
 value = fullCData(pindex);  
 average = fullCData(index_range);
-[METADATA, txt] = calc_labels(METADATA, bnum, branchList, value, average);
+[METADATA, txt] = calc_labels(METADATA, bnum, branchList, value, average, pindex);
 
 catch ME
     fprintf(2, '[myupdatefcn_all] ERROR: %s\n', ME.message);

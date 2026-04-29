@@ -69,6 +69,63 @@ if ~isfield(StructCS, 'cube')
     StructCS.cube = ones(size(StructCS.mcsf), 'like', StructCS.mcsf);
 end
 
+% ==========================================================
+% LOAD + CROP 4-D CBF/CSF velocity (before in-plane seg loop)
+% ==========================================================
+xs = IDX.start(1); xe = IDX.end(1);
+ys = IDX.start(2); ye = IDX.end(2);
+zs = IDX.start(3); ze = IDX.end(3);
+
+if useResampled4d
+    % Resampled 4-D from loadHDF5 (isotropic grid + temporal resample); not read from MD
+    vxf = vel4dResampled.vxf;
+    vyf = vel4dResampled.vyf;
+    vzf = vel4dResampled.vzf;
+    cxf = vel4dResampled.cxf;
+    cyf = vel4dResampled.cyf;
+    czf = vel4dResampled.czf;
+    if ndims(vxf) >= 4
+        nframesData = min([size(vxf, 4), size(vyf, 4), size(vzf, 4), ...
+            size(cxf, 4), size(cyf, 4), size(czf, 4)]);
+    else
+        nframesData = 1;
+    end
+else
+    read4d = @(name) single(h5read(fullfile(MD.directory, MD.infile), name));
+
+    % CBF (blood): /bphx, /bphy, /bphz
+    vxf = read4d('/bphx'); vxf = vxf(xs:xe, ys:ye, zs:ze, :);
+    vyf = read4d('/bphy'); vyf = vyf(xs:xe, ys:ye, zs:ze, :);
+    vzf = read4d('/bphz'); vzf = vzf(xs:xe, ys:ye, zs:ze, :); % CBF
+
+    % CSF: /cphx, /cphy, /cphz
+    cxf = read4d('/cphx'); cxf = cxf(xs:xe, ys:ye, zs:ze, :);
+    cyf = read4d('/cphy'); cyf = cyf(xs:xe, ys:ye, zs:ze, :);
+    czf = read4d('/cphz'); czf = czf(xs:xe, ys:ye, zs:ze, :); % CSF
+    if ndims(vxf) >= 4
+        nframesData = min([size(vxf, 4), size(vyf, 4), size(vzf, 4), ...
+            size(cxf, 4), size(cyf, 4), size(czf, 4)]);
+    else
+        nframesData = 1;
+    end
+end
+if ~isfield(MD, 'nframes') || isempty(MD.nframes)
+    MD.nframes = nframesData;
+else
+    MD.nframes = min(MD.nframes, nframesData);
+end
+if MD.nframes < 1
+    MD.nframes = 1;
+end
+
+% Preview CBF/CSF dynamics at first 4-D load; pipeline pauses until this window is closed.
+try
+    preview_dynamics(vxf, vyf, vzf, cxf, cyf, czf);
+catch ME
+    warning('paramMap_params_CSF:PreviewDynamicsFailed', ...
+        'preview_dynamics failed: %s', ME.message);
+end
+
 % In-Plane Segmentation
 CLVALS = []; 
 set(handles.TextUpdate,'String','Performing In-Plane Segmentation'); drawnow;
@@ -192,55 +249,6 @@ end
 fieldsToAdd = setdiff(fieldnames(CSFSEG), fieldnames(StructCS));
 for i = 1:numel(fieldsToAdd)
     StructCS.(fieldsToAdd{i}) = CSFSEG.(fieldsToAdd{i});
-end
-
-% ==========================================================
-% LOAD + CROP
-% ==========================================================
-xs = IDX.start(1); xe = IDX.end(1);
-ys = IDX.start(2); ye = IDX.end(2);
-zs = IDX.start(3); ze = IDX.end(3);
-
-if useResampled4d
-    % Resampled 4-D from loadHDF5 (isotropic grid + temporal resample); not read from MD
-    vxf = vel4dResampled.vxf;
-    vyf = vel4dResampled.vyf;
-    vzf = vel4dResampled.vzf;
-    cxf = vel4dResampled.cxf;
-    cyf = vel4dResampled.cyf;
-    czf = vel4dResampled.czf;
-    if ndims(vxf) >= 4
-        nframesData = min([size(vxf, 4), size(vyf, 4), size(vzf, 4), ...
-            size(cxf, 4), size(cyf, 4), size(czf, 4)]);
-    else
-        nframesData = 1;
-    end
-else
-    read4d = @(name) single(h5read(fullfile(MD.directory, MD.infile), name));
-
-    % CBF (blood): /bphx, /bphy, /bphz
-    vxf = read4d('/bphx'); vxf = vxf(xs:xe, ys:ye, zs:ze, :);
-    vyf = read4d('/bphy'); vyf = vyf(xs:xe, ys:ye, zs:ze, :);
-    vzf = read4d('/bphz'); vzf = vzf(xs:xe, ys:ye, zs:ze, :); % CBF
-
-    % CSF: /cphx, /cphy, /cphz
-    cxf = read4d('/cphx'); cxf = cxf(xs:xe, ys:ye, zs:ze, :);
-    cyf = read4d('/cphy'); cyf = cyf(xs:xe, ys:ye, zs:ze, :);
-    czf = read4d('/cphz'); czf = czf(xs:xe, ys:ye, zs:ze, :); % CSF
-    if ndims(vxf) >= 4
-        nframesData = min([size(vxf, 4), size(vyf, 4), size(vzf, 4), ...
-            size(cxf, 4), size(cyf, 4), size(czf, 4)]);
-    else
-        nframesData = 1;
-    end
-end
-if ~isfield(MD, 'nframes') || isempty(MD.nframes)
-    MD.nframes = nframesData;
-else
-    MD.nframes = min(MD.nframes, nframesData);
-end
-if MD.nframes < 1
-    MD.nframes = 1;
 end
 
 CSFROI.flow = zeros(size(CSFROI.cnob, 1), MD.nframes, cc, dd);
